@@ -28,6 +28,7 @@ st.markdown("""
         padding: 5px 0;
         border-bottom: 1px solid #f0f2f6;
     }
+    /* Checkbox hizalama */
     div[data-testid="stCheckbox"] { display: flex; align-items: center; }
 </style>
 """, unsafe_allow_html=True)
@@ -35,10 +36,8 @@ st.markdown("""
 st.title("🏥 Dikey Hızlı Veri Girişi")
 
 # --- CHECKBOX OLMASI GEREKEN SÜTUNLARIN TAM LİSTESİ ---
+# Resimlerden çıkardığım liste. Buraya ekleme/çıkarma yapabilirsin.
 CHECKBOX_LIST = [
-    # Yoğun Bakım Basamakları (Eklenenler)
-    "1. Basamak Ybü", "2. Basamak Ybü", "3. Basamak Ybü", "Servis",
-    
     # Ek Hastalıklar
     "HT", "DM", "KBY", "KAH", "AF", "KOAH", "SVH", "Malignite", "KKY", "ALZHEİMER",
     
@@ -46,16 +45,19 @@ CHECKBOX_LIST = [
     "Entübasyon", "İnotrop", "Mükerrer tetkik Ya da tedavi istemi", 
     "Kesin tanı koyulamaması", "8 saati aşıp yatmaması", "Birden fazla kliniği ilgilendirmesi",
     
-    # Laboratuvar ve Görüntüleme Sayıları
+    # Laboratuvar ve Görüntüleme Sayıları (0/1 Mantığı)
     "KOAG", "TİT", "TROP", "Hmg", "Bk", "Kan Gazı", "MALİYET", 
     "Cr", "Ct", "Mr", "Usg",
+    
+    # Yatış Yeri Sınıflaması
+    "Servis", "1. Basamak Ybü", "2. Basamak Ybü", "3. Basamak Ybü",
     
     # Yatırılan Bölümler
     "Dahilye", "Göğüs Hast", "Genel Cerrahi", "Nrş", "KVC", "Kbb", "Plastik", "Göz", 
     "Üroloji", "Göğüs C.", "Kardiyoloji", "Nöroloji", "Göğüs H.", "Enfeksiyon H.", 
     "Psikiyatri", "Cildiye", "Anestezi", "Radyoloji",
     
-    # Saatler
+    # Yatış Verilme Saati
     "08.00-16.00", "16.00-24.00", "00.00-08.00",
     
     # Sonuç
@@ -160,10 +162,8 @@ if w_veri:
         for i, baslik in enumerate(headers):
             if not baslik.strip(): continue
             
-            # --- KRİTİK DÜZELTME: Satır sonu karakterlerini temizle ---
-            # Excel'de Alt+Enter yapılmışsa "1. Basamak\nYbü" olarak gelir.
-            # Bunu "1. Basamak Ybü" haline çeviriyoruz ki listeyle eşleşsin.
-            baslik_temiz = baslik.strip().replace("\n", " ")
+            # Başlıktaki boşlukları temizle ki eşleşme kolay olsun
+            baslik_temiz = baslik.strip()
             
             c1, c2 = st.columns([1.5, 3])
             c1.markdown(f"<div class='etiket-box'>{baslik}:</div>", unsafe_allow_html=True)
@@ -192,4 +192,58 @@ if w_veri:
                 elif any(x in baslik.lower() for x in ['yaş', 'ateş', 'nabız', 'tansiyon', 'spo2']):
                     input_values[baslik] = st.number_input("Değer", value=0.0, step=1.0, format="%.2f", key=key_name, label_visibility="collapsed")
                     
-                # --- KURAL 6:
+                # --- KURAL 6: NOTLAR ---
+                elif any(x in baslik.lower() for x in ['açıklama', 'not']):
+                    input_values[baslik] = st.text_area("Not", height=68, key=key_name, label_visibility="collapsed")
+                
+                # --- KURAL 7: DİĞER HER ŞEY (0) ---
+                else:
+                    input_values[baslik] = st.text_input("Sonuç", value="0", key=key_name, label_visibility="collapsed")
+            
+            st.markdown("<div class='row-container'></div>", unsafe_allow_html=True)
+
+        st.markdown("---")
+        
+        col_submit, col_pass = st.columns([3, 1])
+        kaydet_btn = col_submit.form_submit_button("✅ KAYDET", type="primary", use_container_width=True)
+        
+    pas_gec_btn = st.button("🚫 BU HASTAYI PAS GEÇ", use_container_width=True)
+
+    # --- İŞLEMLER ---
+    if kaydet_btn:
+        try:
+            mevcut = w_veri.col_values(5)
+            dolu = [x for x in mevcut if x.strip()]
+            hedef_satir = len(dolu) + 1
+            if hedef_satir < 3: hedef_satir = 3
+            
+            yeni_satir = []
+            for baslik in headers:
+                if not baslik.strip():
+                    yeni_satir.append("")
+                else:
+                    val = input_values.get(baslik, "")
+                    if isinstance(val, (datetime, pd.Timestamp)): val = val.strftime("%d.%m.%Y")
+                    yeni_satir.append(str(val))
+            
+            hucre = f"A{hedef_satir}"
+            if hedef_satir > len(w_veri.get_all_values()):
+                w_veri.append_row(yeni_satir)
+            else:
+                w_veri.update(range_name=hucre, values=[yeni_satir])
+                
+            st.success(f"✅ Kaydedildi! (Satır: {hedef_satir})")
+            time.sleep(1)
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"Hata: {e}")
+
+    if pas_gec_btn:
+        try:
+            w_atlanan.append_row([secilen_isim, secilen_tarih_str])
+            st.warning(f"⏩ {secilen_isim} pas geçildi.")
+            time.sleep(1)
+            st.rerun()
+        except Exception as e:
+            st.error(f"Hata: {e}")
