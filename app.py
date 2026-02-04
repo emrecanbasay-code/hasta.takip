@@ -27,20 +27,18 @@ def get_data():
     w_liste = sh.worksheet("Liste")
     w_atlanan = sh.worksheet("Atlananlar")
     
-    # --- DEĞİŞİKLİK BURADA: get_all_records() YERİNE get_all_values() KULLANIYORUZ ---
-    # Bu sayede boş başlık hatası almayız.
-    
-    # 1. VERİ SAYFASI OKUMA
+    # Başlık hatasını önlemek için get_all_values kullanıyoruz
     data_veri = w_veri.get_all_values()
-    # Dosyanın yapısına göre başlıklar genelde 2. satırdadır (index 1)
+    
+    # Veri sayfasını DataFrame'e çevir (2. satır başlık varsayımıyla)
     if len(data_veri) > 1:
-        headers = data_veri[1] # 2. satırı başlık yap
-        rows = data_veri[2:]   # 3. satırdan itibaren veri
+        headers = data_veri[1] # 2. satır başlık
+        rows = data_veri[2:]   # 3. satır ve sonrası veri
         df_veri = pd.DataFrame(rows, columns=headers)
     else:
         df_veri = pd.DataFrame()
 
-    # 2. ATLANANLAR LİSTESİ OKUMA
+    # Atlananlar listesini al
     atlanan_list = w_atlanan.col_values(1) 
     
     return w_veri, w_liste, w_atlanan, df_veri, atlanan_list
@@ -57,32 +55,30 @@ try:
     siradaki_tarih_str = None
     bulundu_mesaji = "Tüm kayıtlar tamamlandı!"
     
-    # Kayıtlı isimleri temizle
-    # 'İsim' sütunu yoksa hata vermesin diye kontrol ediyoruz
+    # Kayıtlı isimleri listeye al
     if 'İsim' in df_veri.columns:
         kayitli_isimler = [str(i).strip() for i in df_veri['İsim'].tolist() if str(i).strip() != '']
     else:
         kayitli_isimler = []
-        st.warning("⚠️ Veri sayfasında 'İsim' sütunu bulunamadı. Lütfen Google Sheet başlıklarını kontrol et (2. satır).")
+        # Eğer İsim sütunu bulunamazsa uyarı vermemesi için boş liste atadık,
+        # ancak aşağıda kullanıcıya bilgi vereceğiz.
 
     atlananlar_temiz = [str(i).strip() for i in atlanan_list]
 
-    # Listeyi tara (get_all_values ile ham veri çekiyoruz)
+    # Listeyi tara
     tum_veriler = w_liste.get_all_values() 
     
-    # Excel yapına göre veri 3. satırdan başlıyorsa (index 2)
+    # Excel yapısına göre veri tarama (3. satırdan başlar)
     for row in tum_veriler[2:]: 
         if len(row) < 5: continue
         
-        # Sütunları sayarak alıyoruz (Harf sırasına göre değil, 1., 2., 3. kutu diye)
-        # Sütun C (İsim) -> index 2
-        # Sütun E (Tarih) -> index 4
-        aday_isim = str(row[2]).strip() 
-        aday_tarih = str(row[4]).strip()
+        aday_isim = str(row[2]).strip() # C Sütunu
+        aday_tarih = str(row[4]).strip() # E Sütunu
         
-        if not aday_isim or aday_isim.lower() in ['nan', '', 'none', 'adı soyadı', 'sütun3']: continue
+        if not aday_isim or aday_isim.lower() in ['nan', '', 'none', 'adı soyadı', 'sütun3']: 
+            continue
         
-        # İsim kayıtlılarda yoksa VE Atlananlarda yoksa -> Getir
+        # Eğer kayıtlı değilse ve atlanmamışsa
         if (aday_isim not in kayitli_isimler) and (aday_isim not in atlananlar_temiz):
             siradaki_isim = aday_isim
             siradaki_tarih_str = aday_tarih
@@ -112,8 +108,8 @@ try:
             st.success(f"{siradaki_isim} atlandı.")
             st.rerun()
     
-    elif not kayitli_isimler:
-         st.warning("Henüz hiç kayıt yok veya İsim sütunu okunamadı.")
+    elif not kayitli_isimler and 'İsim' not in df_veri.columns:
+         st.warning("⚠️ Veri sayfasında 'İsim' sütunu bulunamadı. Lütfen Google Sheet başlıklarını (2. satır) kontrol et.")
 
     # --- FORM ALANI ---
     with st.form("main_form", clear_on_submit=True):
@@ -128,11 +124,29 @@ try:
         bolum = col5.text_input("Yatırılan Bölüm")
 
         st.markdown("---")
-        # Buraya vital bulgular vs eklenebilir
         
         submitted = st.form_submit_button("✅ KAYDET")
         
         if submitted:
             if not isim:
                 st.warning("Lütfen bir isim girin.")
-            else
+            else:  # <--- HATA BURADAYDI, ŞİMDİ DÜZELTİLDİ
+                # Veri sekmesine eklenecek satır
+                yeni_satir = [
+                    "", # A Sütunu (Boş)
+                    str(tarih), # B
+                    isim,       # C
+                    yas,        # D
+                    cinsiyet,   # E
+                    bolum       # F
+                ]
+                
+                try:
+                    w_veri.append_row(yeni_satir)
+                    st.success(f"✅ {isim} başarıyla kaydedildi!")
+                    st.session_state.form_isim = ""
+                except Exception as e:
+                    st.error(f"Kayıt hatası: {e}")
+
+except Exception as e:
+    st.error(f"Sistem Hatası: {e}")
