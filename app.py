@@ -28,38 +28,24 @@ st.markdown("""
         padding: 5px 0;
         border-bottom: 1px solid #f0f2f6;
     }
-    /* Checkbox hizalama */
     div[data-testid="stCheckbox"] { display: flex; align-items: center; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🏥 Dikey Hızlı Veri Girişi")
 
-# --- CHECKBOX OLMASI GEREKEN SÜTUNLARIN TAM LİSTESİ ---
+# --- CHECKBOX LİSTESİ ---
 CHECKBOX_LIST = [
-    # Ek Hastalıklar
     "HT", "DM", "KBY", "KAH", "AF", "KOAH", "SVH", "Malignite", "KKY", "ALZHEİMER",
-    
-    # Yatırılma Sebebi
     "Entübasyon", "İnotrop", "Mükerrer tetkik Ya da tedavi istemi", 
     "Kesin tanı koyulamaması", "8 saati aşıp yatmaması", "Birden fazla kliniği ilgilendirmesi",
-    
-    # Laboratuvar ve Görüntüleme Sayıları
     "KOAG", "TİT", "TROP", "Hmg", "Bk", "Kan Gazı", "MALİYET", 
     "Cr", "Ct", "Mr", "Usg",
-    
-    # Yatış Yeri Sınıflaması
     "Servis", "1. Basamak Ybü", "2. Basamak Ybü", "3. Basamak Ybü",
-    
-    # Yatırılan Bölümler
     "Dahilye", "Göğüs Hast", "Genel Cerrahi", "Nrş", "KVC", "Kbb", "Plastik", "Göz", 
     "Üroloji", "Göğüs C.", "Kardiyoloji", "Nöroloji", "Göğüs H.", "Enfeksiyon H.", 
     "Psikiyatri", "Cildiye", "Anestezi", "Radyoloji",
-    
-    # Yatış Verilme Saati
     "08.00-16.00", "16.00-24.00", "00.00-08.00",
-    
-    # Sonuç
     "DEVİR", "Taburcu", "Ölüm", "T. RED"
 ]
 
@@ -90,7 +76,7 @@ def get_data():
         # Son Kayıt Bulma
         son_kayit_isim = None
         try:
-            isimler = w_veri.col_values(5) # E Sütunu
+            isimler = w_veri.col_values(5) 
             dolu = [x for x in isimler[2:] if x.strip()]
             if dolu: son_kayit_isim = dolu[-1]
         except: pass
@@ -103,6 +89,13 @@ def get_data():
 # --- ANA AKIŞ ---
 w_veri, w_atlanan, headers, tum_veriler, son_kayit_isim = get_data()
 
+# --- GÜVENLİ DEĞİŞKEN BAŞLATMA ---
+# Hatanın sebebi bu değişkenlerin tanımlanmamış olmasıydı.
+secilen_isim = ""
+secilen_tarih_str = ""
+t_obj = datetime.now()
+secenekler = []
+
 if w_veri:
     
     # 1. SEÇİM ALANI
@@ -110,12 +103,14 @@ if w_veri:
         st.info(f"📝 Son Kayıt: **{son_kayit_isim if son_kayit_isim else 'Yok'}**")
         
         temiz_liste = []
-        for row in tum_veriler[3:]:
-            if len(row) > 6:
-                isim = str(row[4]).strip()
-                tarih = str(row[6]).strip()
-                if len(isim) > 2 and "Sütun" not in isim:
-                    temiz_liste.append({"isim": isim, "tarih": tarih})
+        # Veri kontrolü
+        if len(tum_veriler) > 3:
+            for row in tum_veriler[3:]:
+                if len(row) > 6:
+                    isim = str(row[4]).strip()
+                    tarih = str(row[6]).strip()
+                    if len(isim) > 2 and "Sütun" not in isim:
+                        temiz_liste.append({"isim": isim, "tarih": tarih})
         
         aday_listesi = []
         if son_kayit_isim:
@@ -131,11 +126,4 @@ if w_veri:
             else:
                 aday_listesi = temiz_liste[:15]
         else:
-            aday_listesi = temiz_liste[:15]
-            
-        secenekler = [f"{h['isim']} | {h['tarih']}" for h in aday_listesi]
-        if not secenekler:
-            st.error("Liste Boş.")
-            st.stop()
-            
-        secilen_str
+            aday_list
