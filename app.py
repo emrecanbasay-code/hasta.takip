@@ -49,15 +49,15 @@ def get_data_safe():
         st.error(f"Google Sheets Bağlantı Hatası: {e}")
         return None, None, [], [], []
 
-# --- SESSION STATE BAŞLATMA ---
+# --- SESSION STATE ---
 if 'form_vals' not in st.session_state: st.session_state.form_vals = {}
 
-# --- ANA PROGRAM AKIŞI ---
+# --- ANA PROGRAM ---
 w_veri, w_atlanan, headers, tum_veriler, atlanan_list = get_data_safe()
 
 if w_veri:
     
-    # 1. SIRADAKİ HASTAYI BUL
+    # 1. SIRADAKİ HASTAYI BULMA
     siradaki_isim = None
     siradaki_tarih_str = None
     bulundu_mesaji = "✅ Liste tamamlandı!"
@@ -73,8 +73,8 @@ if w_veri:
         if len(row) < 7: continue 
         
         try:
-            aday_isim = str(row[4]).strip()  
-            aday_tarih = str(row[6]).strip() 
+            aday_isim = str(row[4]).strip()  # E Sütunu (İsim)
+            aday_tarih = str(row[6]).strip() # G Sütunu (Tarih)
         except:
             continue
             
@@ -87,13 +87,13 @@ if w_veri:
             bulundu_mesaji = f"Sıradaki Hasta: **{siradaki_isim}** ({siradaki_tarih_str})"
             break
 
-    # 2. BİLGİ KUTUSU VE BUTONLAR
+    # 2. BİLGİ BUTONLARI
     if siradaki_isim:
         st.info(f"🔔 {bulundu_mesaji}")
         col_btn1, col_btn2 = st.columns([1, 4])
         
         if col_btn1.button("⬇️ Bilgileri Getir"):
-            # Tarihi ayarla
+            # Tarihi parse et
             tarih_val = datetime.now()
             try:
                 t_str = siradaki_tarih_str.split(' ')[0]
@@ -104,8 +104,9 @@ if w_veri:
                     except: pass
             except: pass
             
-            st.session_state.form_vals['İsim'] = siradaki_isim
-            st.session_state.form_vals['Tarih'] = tarih_val
+            # Değerleri hafızaya al
+            st.session_state.form_vals['Auto_Isim'] = siradaki_isim
+            st.session_state.form_vals['Auto_Tarih'] = tarih_val
             st.rerun()
 
         if col_btn2.button("🚫 Pas Geç"):
@@ -115,78 +116,89 @@ if w_veri:
     
     st.markdown("---")
 
-    # 3. OTOMATİK FORM OLUŞTURMA (Her şey 0 olsun modu)
+    # 3. VERİ GİRİŞ FORMU
     with st.form("main_form", clear_on_submit=True):
         st.subheader("📝 Veri Girişi")
         
         form_inputs = {}
         cols = st.columns(3)
-        idx = 0
         
-        for baslik in headers:
-            if not baslik.strip(): continue
+        # --- ÖNEMLİ: ENUMERATE KULLANIYORUZ (SIRA NUMARASINA GÖRE İŞLEM) ---
+        # i = 0 (A sütunu), i = 4 (E sütunu - İsim), i = 6 (G sütunu - Tarih)
+        
+        for i, baslik in enumerate(headers):
+            # Boş başlık varsa atla
+            if not baslik.strip(): 
+                form_inputs[f"col_{i}"] = "" # Yer tutucu
+                continue
             
-            c = cols[idx % 3]
-            idx += 1
+            c = cols[i % 3] # 3 sütunlu düzen
+            key_name = f"input_{i}_{baslik}"
             
-            # Session state'den gelen bir değer varsa onu al, yoksa None
-            val = st.session_state.form_vals.get(baslik, None)
-            key_name = f"input_{baslik}_{idx}"
+            # --- KURAL 1: İSİM ALANI (SIRA 4) ---
+            if i == 4: 
+                # Session'dan gelen isim varsa onu kullan, yoksa başlığı kullanma
+                val = st.session_state.form_vals.get('Auto_Isim', "")
+                form_inputs[baslik] = c.text_input(f"{baslik} (İsim)", value=val, key=key_name)
+                
+            # --- KURAL 2: TARİH ALANI (SIRA 6) ---
+            elif i == 6:
+                val = st.session_state.form_vals.get('Auto_Tarih', datetime.now())
+                form_inputs[baslik] = c.date_input(f"{baslik} (Tarih)", value=val, key=key_name)
             
-            # --- KURAL 1: Tarih Alanı ---
-            if "tarih" in baslik.lower():
-                default_date = val if val else datetime.now()
-                form_inputs[baslik] = c.date_input(baslik, value=default_date, key=key_name)
-            
-            # --- KURAL 2: Cinsiyet Seçimi ---
+            # --- KURAL 3: CİNSİYET ---
             elif "cinsiyet" in baslik.lower():
                 form_inputs[baslik] = c.selectbox(baslik, ["", "E", "K"], key=key_name)
                 
-            # --- KURAL 3: Evet/Hayır Kutucukları (Checkbox) ---
+            # --- KURAL 4: EVET/HAYIR ---
             elif baslik in ["HT", "DM", "KOAH", "KBY", "KAH", "AF", "SVH", "Malignite"]:
                 check = c.checkbox(baslik, key=key_name)
                 form_inputs[baslik] = 1 if check else 0
             
-            # --- KURAL 4: Sayısal Değerler (Yaş, Ateş, Tansiyon vb.) ---
-            # Bunlar 0.00 olarak başlasın
+            # --- KURAL 5: SAYISAL (Ateş, Tansiyon vs.) ---
             elif any(x in baslik.lower() for x in ['yaş', 'ateş', 'nabız', 'tansiyon', 'spo2']):
-                default_num = val if val else 0.0
-                form_inputs[baslik] = c.number_input(baslik, value=float(default_num), step=1.0, format="%.2f", key=key_name)
-            
-            # --- KURAL 5: DİĞER HER ŞEY (Laboratuvar, SütunX vb.) ---
-            else:
-                # İsim, Bölüm, Notlar gibi metin alanları BOŞ kalsın, "0" yazmasın.
-                if any(x in baslik.lower() for x in ['isim', 'ad soyad', 'bölüm', 'yatış', 'açıklama', 'not']):
-                    default_text = val if val else ""
-                else:
-                    # Geriye kalan (muhtemelen laboratuvar) her şey "0" olarak gelsin
-                    default_text = val if val else "0"
+                form_inputs[baslik] = c.number_input(baslik, value=0.0, step=1.0, format="%.2f", key=key_name)
                 
-                form_inputs[baslik] = c.text_input(baslik, value=str(default_text), key=key_name)
+            # --- KURAL 6: DİĞER HER ŞEY (0 OLARAK GELSİN) ---
+            else:
+                # Bölüm, Yatış gibi metinler boş kalsın
+                if any(x in baslik.lower() for x in ['bölüm', 'yatış', 'açıklama', 'not']):
+                    form_inputs[baslik] = c.text_input(baslik, value="", key=key_name)
+                else:
+                    # Laboratuvarlar 0 gelsin
+                    form_inputs[baslik] = c.text_input(baslik, value="0", key=key_name)
 
         st.markdown("---")
-        submitted = st.form_submit_button("✅ KAYDET")
+        submitted = st.form_submit_button("✅ KESİN KAYDET")
         
         if submitted:
             yeni_satir = []
-            for baslik in headers:
-                if baslik.strip():
-                    deger = form_inputs.get(baslik, "")
-                    
-                    # Tarih formatını düzelt
-                    if isinstance(deger, (datetime, pd.Timestamp)):
-                        deger = deger.strftime("%d.%m.%Y")
-                    
-                    yeni_satir.append(str(deger))
+            
+            # Sırayla verileri topla
+            for i, baslik in enumerate(headers):
+                if not baslik.strip():
+                    yeni_satir.append("") # Boş sütun
                 else:
-                    yeni_satir.append("")
+                    raw_val = form_inputs.get(baslik, "")
+                    
+                    # Tarih objesini string'e çevir
+                    if isinstance(raw_val, (datetime, pd.Timestamp)):
+                        final_val = raw_val.strftime("%d.%m.%Y")
+                    else:
+                        final_val = str(raw_val)
+                        
+                    yeni_satir.append(final_val)
             
             try:
+                # Veriyi gönder
                 w_veri.append_row(yeni_satir)
-                st.success("✅ Kayıt Başarılı!")
-                st.session_state.form_vals = {} 
+                st.success(f"✅ Başarıyla Kaydedildi! (İsim: {yeni_satir[4]})")
+                
+                # Hafızayı temizle
+                st.session_state.form_vals = {}
+                
             except Exception as e:
-                st.error(f"Kayıt sırasında hata oluştu: {e}")
+                st.error(f"Kayıt Hatası: {e}")
 
 else:
-    st.warning("Veritabanına bağlanılamadı. Lütfen sayfayı yenileyin.")
+    st.warning("Veritabanı bağlantısı yok.")
