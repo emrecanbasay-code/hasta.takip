@@ -27,10 +27,20 @@ def get_data():
     w_liste = sh.worksheet("Liste")
     w_atlanan = sh.worksheet("Atlananlar")
     
-    # Veri analizleri için DataFrame
-    df_veri = pd.DataFrame(w_veri.get_all_records())
+    # --- DEĞİŞİKLİK BURADA: get_all_records() YERİNE get_all_values() KULLANIYORUZ ---
+    # Bu sayede boş başlık hatası almayız.
     
-    # Atlananlar listesini al (Sadece isimleri kontrol için çekiyoruz ama sayfada tarih de duracak)
+    # 1. VERİ SAYFASI OKUMA
+    data_veri = w_veri.get_all_values()
+    # Dosyanın yapısına göre başlıklar genelde 2. satırdadır (index 1)
+    if len(data_veri) > 1:
+        headers = data_veri[1] # 2. satırı başlık yap
+        rows = data_veri[2:]   # 3. satırdan itibaren veri
+        df_veri = pd.DataFrame(rows, columns=headers)
+    else:
+        df_veri = pd.DataFrame()
+
+    # 2. ATLANANLAR LİSTESİ OKUMA
     atlanan_list = w_atlanan.col_values(1) 
     
     return w_veri, w_liste, w_atlanan, df_veri, atlanan_list
@@ -47,24 +57,32 @@ try:
     siradaki_tarih_str = None
     bulundu_mesaji = "Tüm kayıtlar tamamlandı!"
     
-    # Kayıtlı ve atlanan isimleri temizle
-    kayitli_isimler = [str(i).strip() for i in df_veri['İsim'].tolist() if str(i).strip() != '']
+    # Kayıtlı isimleri temizle
+    # 'İsim' sütunu yoksa hata vermesin diye kontrol ediyoruz
+    if 'İsim' in df_veri.columns:
+        kayitli_isimler = [str(i).strip() for i in df_veri['İsim'].tolist() if str(i).strip() != '']
+    else:
+        kayitli_isimler = []
+        st.warning("⚠️ Veri sayfasında 'İsim' sütunu bulunamadı. Lütfen Google Sheet başlıklarını kontrol et (2. satır).")
+
     atlananlar_temiz = [str(i).strip() for i in atlanan_list]
 
-    # Listeyi tara
+    # Listeyi tara (get_all_values ile ham veri çekiyoruz)
     tum_veriler = w_liste.get_all_values() 
     
-    # Başlıkları atla (Excel yapına göre 3. satırdan veriler başlıyor varsayıyoruz)
-    # Eğer listenin en tepesinde başlık yoksa [2:] yerine [0:] yap.
+    # Excel yapına göre veri 3. satırdan başlıyorsa (index 2)
     for row in tum_veriler[2:]: 
         if len(row) < 5: continue
         
-        aday_isim = str(row[2]).strip() # 3. Sütun (İsim)
-        aday_tarih = str(row[4]).strip() # 5. Sütun (Tarih)
+        # Sütunları sayarak alıyoruz (Harf sırasına göre değil, 1., 2., 3. kutu diye)
+        # Sütun C (İsim) -> index 2
+        # Sütun E (Tarih) -> index 4
+        aday_isim = str(row[2]).strip() 
+        aday_tarih = str(row[4]).strip()
         
-        if not aday_isim or aday_isim.lower() in ['nan', '', 'none']: continue
+        if not aday_isim or aday_isim.lower() in ['nan', '', 'none', 'adı soyadı', 'sütun3']: continue
         
-        # EĞER: İsim kayıtlılarda yoksa VE Atlananlarda yoksa -> Getir
+        # İsim kayıtlılarda yoksa VE Atlananlarda yoksa -> Getir
         if (aday_isim not in kayitli_isimler) and (aday_isim not in atlananlar_temiz):
             siradaki_isim = aday_isim
             siradaki_tarih_str = aday_tarih
@@ -77,12 +95,10 @@ try:
         
         c1, c2, c3 = st.columns([1, 1, 3])
         
-        # BUTON 1: BİLGİLERİ GETİR
         if c1.button("⬇️ Bilgileri Doldur"):
             st.session_state.form_isim = siradaki_isim
             try:
-                # Tarih formatını yakalamaya çalış
-                tarih_temiz = siradaki_tarih_str.split(' ')[0] # Saat varsa at
+                tarih_temiz = siradaki_tarih_str.split(' ')[0]
                 for fmt in ('%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y'):
                     try:
                         st.session_state.form_tarih = datetime.strptime(tarih_temiz, fmt)
@@ -91,12 +107,13 @@ try:
             except: pass
             st.rerun()
             
-        # BUTON 2: PAS GEÇ (GÜNCELLENEN KISIM)
-        if c2.button("🚫 Pas Geç (İsim ve Tarihi Kaydet)"):
-            # ARTIK HEM İSMİ HEM TARİHİ YAZIYORUZ
+        if c2.button("🚫 Pas Geç"):
             w_atlanan.append_row([siradaki_isim, siradaki_tarih_str])
-            st.success(f"{siradaki_isim} ({siradaki_tarih_str}) atlananlar listesine eklendi.")
+            st.success(f"{siradaki_isim} atlandı.")
             st.rerun()
+    
+    elif not kayitli_isimler:
+         st.warning("Henüz hiç kayıt yok veya İsim sütunu okunamadı.")
 
     # --- FORM ALANI ---
     with st.form("main_form", clear_on_submit=True):
@@ -105,48 +122,17 @@ try:
         isim = col1.text_input("İsim", value=st.session_state.form_isim)
         tarih = col2.date_input("Tarih", value=st.session_state.form_tarih)
         
-        # Örnek Alanlar (Senin Excel yapına göre burayı çoğaltabilirsin)
         col3, col4, col5 = st.columns(3)
         yas = col3.number_input("Yaş", step=1, min_value=0)
         cinsiyet = col4.selectbox("Cinsiyet", ["E", "K", "Belirtilmemiş"])
         bolum = col5.text_input("Yatırılan Bölüm")
 
         st.markdown("---")
-        st.caption("Diğer tıbbi veriler...")
-        # Buraya vital bulgular vs eklenebilir...
-        # Örnek:
-        ates = st.number_input("Ateş", format="%.1f")
+        # Buraya vital bulgular vs eklenebilir
         
         submitted = st.form_submit_button("✅ KAYDET")
         
         if submitted:
             if not isim:
                 st.warning("Lütfen bir isim girin.")
-            else:
-                # Google Sheet 'Veri' sekmesine kaydedilecek sıra
-                # DİKKAT: Buradaki sıra Excel'deki sütun sırasıyla birebir aynı olmalı.
-                yeni_satir = [
-                    # Sıra No (Boş bırakabilirsin veya formül koyabilirsin)
-                    "", 
-                    str(tarih),
-                    isim, 
-                    yas, 
-                    cinsiyet,
-                    # ... Diğer tüm değişkenlerin buraya sırasıyla gelecek
-                    # Örnek: 1 if hastalik else 0,
-                    # ates,
-                    # tansiyon...
-                ]
-                
-                try:
-                    w_veri.append_row(yeni_satir)
-                    st.success(f"✅ {isim} başarıyla kaydedildi!")
-                    # Formu temizlemek için state'i sıfırla
-                    st.session_state.form_isim = ""
-                    # st.rerun() formun temizlenmesini görsel olarak hızlandırır ama şart değil
-                except Exception as e:
-                    st.error(f"Kayıt hatası: {e}")
-
-except Exception as e:
-    st.error(f"Bir hata oluştu: {e}")
-    st.warning("Lütfen internet bağlantınızı ve Google Sheets ayarlarını kontrol edin.")
+            else
