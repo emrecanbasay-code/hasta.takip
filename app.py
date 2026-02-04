@@ -7,8 +7,12 @@ from datetime import datetime
 # --- AYARLAR ---
 SHEET_ADI = "Hasta_Takip_Sistemi" 
 
-st.set_page_config(page_title="Bulut Hasta Takip", layout="wide", page_icon="☁️")
-st.title("🏥 Bulut Tabanlı Hasta Giriş Paneli")
+st.set_page_config(page_title="Pro Hasta Takip", layout="wide", page_icon="🏥")
+st.title("🏥 Akıllı Hasta Veri Giriş Paneli")
+
+# --- YAN MENÜ (HATA AYIKLAMA) ---
+st.sidebar.header("🔧 Ayarlar / Kontrol")
+debug_mode = st.sidebar.checkbox("Hata Ayıklama Modunu Aç (Verileri Gör)")
 
 # --- GOOGLE SHEETS BAĞLANTISI ---
 @st.cache_resource
@@ -27,58 +31,65 @@ def get_data():
     w_liste = sh.worksheet("Liste")
     w_atlanan = sh.worksheet("Atlananlar")
     
-    # Başlık hatasını önlemek için get_all_values kullanıyoruz
+    # 1. VERİ SAYFASI (Başlıkları okumak için kritik)
     data_veri = w_veri.get_all_values()
     
-    # Veri sayfasını DataFrame'e çevir (2. satır başlık varsayımıyla)
+    # Başlıkları 2. satırdan alalım (Senin dosyanda 2. satırda olduğu için)
+    # Eğer başlıklar 1. satırdaysa `data_veri[0]` yap.
+    headers = []
     if len(data_veri) > 1:
-        headers = data_veri[1] # 2. satır başlık
-        rows = data_veri[2:]   # 3. satır ve sonrası veri
-        df_veri = pd.DataFrame(rows, columns=headers)
+        headers = data_veri[1] # 2. Satır Başlıklar
+        # Pandas DF oluştur (Eski kayıtları kontrol için)
+        df_veri = pd.DataFrame(data_veri[2:], columns=headers)
     else:
         df_veri = pd.DataFrame()
 
-    # Atlananlar listesini al
+    # 2. LİSTE VE ATLANANLAR
     atlanan_list = w_atlanan.col_values(1) 
     
-    return w_veri, w_liste, w_atlanan, df_veri, atlanan_list
+    return w_veri, w_liste, w_atlanan, df_veri, headers, atlanan_list
 
 # --- SESSION STATE ---
-if 'form_isim' not in st.session_state: st.session_state.form_isim = ""
-if 'form_tarih' not in st.session_state: st.session_state.form_tarih = datetime.now()
+if 'form_vals' not in st.session_state: st.session_state.form_vals = {}
+if 'siradaki_kisi' not in st.session_state: st.session_state.siradaki_kisi = None
 
 try:
-    w_veri, w_liste, w_atlanan, df_veri, atlanan_list = get_data()
+    w_veri, w_liste, w_atlanan, df_veri, headers, atlanan_list = get_data()
     
-    # --- SIRADAKİ HASTAYI BULMA ---
+    # --- SIRADAKİ HASTAYI BULMA MANTIĞI ---
     siradaki_isim = None
     siradaki_tarih_str = None
-    bulundu_mesaji = "Tüm kayıtlar tamamlandı!"
+    bulundu_mesaji = "✅ Tüm liste tamamlandı!"
     
-    # Kayıtlı isimleri listeye al
+    # Kayıtlı isimler
+    kayitli_isimler = []
     if 'İsim' in df_veri.columns:
         kayitli_isimler = [str(i).strip() for i in df_veri['İsim'].tolist() if str(i).strip() != '']
-    else:
-        kayitli_isimler = []
-        # Eğer İsim sütunu bulunamazsa uyarı vermemesi için boş liste atadık,
-        # ancak aşağıda kullanıcıya bilgi vereceğiz.
-
     atlananlar_temiz = [str(i).strip() for i in atlanan_list]
 
-    # Listeyi tara
-    tum_veriler = w_liste.get_all_values() 
+    # Listeyi Tara
+    tum_veriler = w_liste.get_all_values()
     
-    # Excel yapısına göre veri tarama (3. satırdan başlar)
+    # Debug Modunda Listenin ilk satırlarını gösterelim ki sütun yerini bulalım
+    if debug_mode:
+        st.sidebar.warning("📊 Liste Dosyası İlk 5 Satır (Sütun Saymak İçin):")
+        st.sidebar.write(tum_veriler[:5])
+
+    # Excel yapına göre döngü (3. satırdan başla)
     for row in tum_veriler[2:]: 
-        if len(row) < 5: continue
+        if len(row) < 7: continue # Satır çok kısaysa atla
         
-        aday_isim = str(row[2]).strip() # C Sütunu
-        aday_tarih = str(row[4]).strip() # E Sütunu
+        # --- KRİTİK DÜZELTME BURADA ---
+        # Senin dosya yapın: ",,,,İsim,Doktor,Tarih" şeklinde görünüyor.
+        # Bu yüzden İsim index 4, Tarih index 6 olabilir.
+        aday_isim = str(row[4]).strip()  # 5. Sütun (İsim) - Burası değişti
+        aday_tarih = str(row[6]).strip() # 7. Sütun (Tarih) - Burası değişti
         
-        if not aday_isim or aday_isim.lower() in ['nan', '', 'none', 'adı soyadı', 'sütun3']: 
+        # Eğer yukarıdaki indexler yanlışsa Debug modundan bakıp değiştirebilirsin.
+        
+        if not aday_isim or len(aday_isim) < 3 or aday_isim.lower() in ['nan', 'none']: 
             continue
         
-        # Eğer kayıtlı değilse ve atlanmamışsa
         if (aday_isim not in kayitli_isimler) and (aday_isim not in atlananlar_temiz):
             siradaki_isim = aday_isim
             siradaki_tarih_str = aday_tarih
@@ -88,65 +99,39 @@ try:
     # --- BİLGİ KUTUSU ---
     if siradaki_isim:
         st.info(f"🔔 {bulundu_mesaji}")
-        
-        c1, c2, c3 = st.columns([1, 1, 3])
+        c1, c2 = st.columns([1, 4])
         
         if c1.button("⬇️ Bilgileri Doldur"):
-            st.session_state.form_isim = siradaki_isim
+            # Tarihi düzelt
+            tarih_val = datetime.now()
             try:
-                tarih_temiz = siradaki_tarih_str.split(' ')[0]
+                # "2022-01-02" veya "02.01.2022" formatlarını dene
+                t_str = siradaki_tarih_str.split(' ')[0]
                 for fmt in ('%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y'):
                     try:
-                        st.session_state.form_tarih = datetime.strptime(tarih_temiz, fmt)
+                        tarih_val = datetime.strptime(t_str, fmt)
                         break
                     except: pass
             except: pass
+            
+            st.session_state.form_vals['İsim'] = siradaki_isim
+            st.session_state.form_vals['Tarih'] = tarih_val
             st.rerun()
             
         if c2.button("🚫 Pas Geç"):
             w_atlanan.append_row([siradaki_isim, siradaki_tarih_str])
-            st.success(f"{siradaki_isim} atlandı.")
+            st.success("Atlandı.")
             st.rerun()
-    
-    elif not kayitli_isimler and 'İsim' not in df_veri.columns:
-         st.warning("⚠️ Veri sayfasında 'İsim' sütunu bulunamadı. Lütfen Google Sheet başlıklarını (2. satır) kontrol et.")
+    elif debug_mode:
+        st.write("Sıradaki kişi bulunamadı. Lütfen sütun indexlerini kontrol et.")
 
-    # --- FORM ALANI ---
+    st.markdown("---")
+
+    # --- OTOMATİK FORM ALANI ---
+    # Burada Google Sheet'teki başlıkları okuyup ona göre form oluşturuyoruz
     with st.form("main_form", clear_on_submit=True):
         st.subheader("📝 Veri Girişi")
-        col1, col2 = st.columns(2)
-        isim = col1.text_input("İsim", value=st.session_state.form_isim)
-        tarih = col2.date_input("Tarih", value=st.session_state.form_tarih)
         
-        col3, col4, col5 = st.columns(3)
-        yas = col3.number_input("Yaş", step=1, min_value=0)
-        cinsiyet = col4.selectbox("Cinsiyet", ["E", "K", "Belirtilmemiş"])
-        bolum = col5.text_input("Yatırılan Bölüm")
-
-        st.markdown("---")
+        form_values = {}
         
-        submitted = st.form_submit_button("✅ KAYDET")
-        
-        if submitted:
-            if not isim:
-                st.warning("Lütfen bir isim girin.")
-            else:  # <--- HATA BURADAYDI, ŞİMDİ DÜZELTİLDİ
-                # Veri sekmesine eklenecek satır
-                yeni_satir = [
-                    "", # A Sütunu (Boş)
-                    str(tarih), # B
-                    isim,       # C
-                    yas,        # D
-                    cinsiyet,   # E
-                    bolum       # F
-                ]
-                
-                try:
-                    w_veri.append_row(yeni_satir)
-                    st.success(f"✅ {isim} başarıyla kaydedildi!")
-                    st.session_state.form_isim = ""
-                except Exception as e:
-                    st.error(f"Kayıt hatası: {e}")
-
-except Exception as e:
-    st.error(f"Sistem Hatası: {e}")
+        # Başlıkları 3'erli gruplar halinde gösterelim ki sayfa uzamasın
