@@ -36,7 +36,6 @@ st.markdown("""
 st.title("🏥 Dikey Hızlı Veri Girişi")
 
 # --- CHECKBOX OLMASI GEREKEN SÜTUNLARIN TAM LİSTESİ ---
-# Resimlerden çıkardığım liste. Buraya ekleme/çıkarma yapabilirsin.
 CHECKBOX_LIST = [
     # Ek Hastalıklar
     "HT", "DM", "KBY", "KAH", "AF", "KOAH", "SVH", "Malignite", "KKY", "ALZHEİMER",
@@ -45,7 +44,7 @@ CHECKBOX_LIST = [
     "Entübasyon", "İnotrop", "Mükerrer tetkik Ya da tedavi istemi", 
     "Kesin tanı koyulamaması", "8 saati aşıp yatmaması", "Birden fazla kliniği ilgilendirmesi",
     
-    # Laboratuvar ve Görüntüleme Sayıları (0/1 Mantığı)
+    # Laboratuvar ve Görüntüleme Sayıları
     "KOAG", "TİT", "TROP", "Hmg", "Bk", "Kan Gazı", "MALİYET", 
     "Cr", "Ct", "Mr", "Usg",
     
@@ -139,111 +138,4 @@ if w_veri:
             st.error("Liste Boş.")
             st.stop()
             
-        secilen_str = st.selectbox("👇 Hasta Seçiniz:", secenekler)
-        secilen_isim = secilen_str.split(" | ")[0]
-        secilen_tarih_str = secilen_str.split(" | ")[1]
-
-        t_obj = datetime.now()
-        try:
-            t_clean = secilen_tarih_str.split(' ')[0]
-            for fmt in ('%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y'):
-                try: t_obj = datetime.strptime(t_clean, fmt); break
-                except: pass
-        except: pass
-
-    st.markdown("---")
-    
-    # 2. DİKEY VERİ GİRİŞ FORMU
-    input_values = {}
-    
-    with st.form("dikey_form", clear_on_submit=False):
-        st.write("### 📋 Veri Kartı")
-        
-        for i, baslik in enumerate(headers):
-            if not baslik.strip(): continue
-            
-            # Başlıktaki boşlukları temizle ki eşleşme kolay olsun
-            baslik_temiz = baslik.strip()
-            
-            c1, c2 = st.columns([1.5, 3])
-            c1.markdown(f"<div class='etiket-box'>{baslik}:</div>", unsafe_allow_html=True)
-            
-            key_name = f"in_{i}_{baslik}"
-            
-            with c2:
-                # --- KURAL 1: CHECKBOX LİSTESİNDEKİLER ---
-                if baslik_temiz in CHECKBOX_LIST:
-                    chk = st.checkbox("Evet / Var", key=key_name)
-                    input_values[baslik] = 1 if chk else 0
-                
-                # --- KURAL 2: İSİM ---
-                elif i == 4: 
-                    input_values[baslik] = st.text_input("İsim", value=secilen_isim, key=key_name, label_visibility="collapsed")
-                
-                # --- KURAL 3: TARİH ---
-                elif i == 6:
-                    input_values[baslik] = st.date_input("Tarih", value=t_obj, key=key_name, label_visibility="collapsed")
-                
-                # --- KURAL 4: CİNSİYET ---
-                elif "cinsiyet" in baslik.lower():
-                    input_values[baslik] = st.selectbox("Cinsiyet", ["", "E", "K"], key=key_name, label_visibility="collapsed")
-                
-                # --- KURAL 5: SAYISAL ---
-                elif any(x in baslik.lower() for x in ['yaş', 'ateş', 'nabız', 'tansiyon', 'spo2']):
-                    input_values[baslik] = st.number_input("Değer", value=0.0, step=1.0, format="%.2f", key=key_name, label_visibility="collapsed")
-                    
-                # --- KURAL 6: NOTLAR ---
-                elif any(x in baslik.lower() for x in ['açıklama', 'not']):
-                    input_values[baslik] = st.text_area("Not", height=68, key=key_name, label_visibility="collapsed")
-                
-                # --- KURAL 7: DİĞER HER ŞEY (0) ---
-                else:
-                    input_values[baslik] = st.text_input("Sonuç", value="0", key=key_name, label_visibility="collapsed")
-            
-            st.markdown("<div class='row-container'></div>", unsafe_allow_html=True)
-
-        st.markdown("---")
-        
-        col_submit, col_pass = st.columns([3, 1])
-        kaydet_btn = col_submit.form_submit_button("✅ KAYDET", type="primary", use_container_width=True)
-        
-    pas_gec_btn = st.button("🚫 BU HASTAYI PAS GEÇ", use_container_width=True)
-
-    # --- İŞLEMLER ---
-    if kaydet_btn:
-        try:
-            mevcut = w_veri.col_values(5)
-            dolu = [x for x in mevcut if x.strip()]
-            hedef_satir = len(dolu) + 1
-            if hedef_satir < 3: hedef_satir = 3
-            
-            yeni_satir = []
-            for baslik in headers:
-                if not baslik.strip():
-                    yeni_satir.append("")
-                else:
-                    val = input_values.get(baslik, "")
-                    if isinstance(val, (datetime, pd.Timestamp)): val = val.strftime("%d.%m.%Y")
-                    yeni_satir.append(str(val))
-            
-            hucre = f"A{hedef_satir}"
-            if hedef_satir > len(w_veri.get_all_values()):
-                w_veri.append_row(yeni_satir)
-            else:
-                w_veri.update(range_name=hucre, values=[yeni_satir])
-                
-            st.success(f"✅ Kaydedildi! (Satır: {hedef_satir})")
-            time.sleep(1)
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"Hata: {e}")
-
-    if pas_gec_btn:
-        try:
-            w_atlanan.append_row([secilen_isim, secilen_tarih_str])
-            st.warning(f"⏩ {secilen_isim} pas geçildi.")
-            time.sleep(1)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Hata: {e}")
+        secilen_str
