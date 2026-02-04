@@ -49,7 +49,7 @@ CHECKBOX_LIST = [
     "DEVİR", "Taburcu", "Ölüm", "T. RED"
 ]
 
-# --- GOOGLE SHEETS BAĞLANTISI ---
+# --- GOOGLE SHEETS BAĞLANTISI (Sadece Bağlantı) ---
 @st.cache_resource
 def get_connection():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -58,72 +58,51 @@ def get_connection():
     client = gspread.authorize(creds)
     return client
 
-def get_data():
+# --- VERİ ÇEKME (ÖNBELLEKLİ - CACHED) ---
+# Bu fonksiyon veriyi çeker ve 15 saniye boyunca hafızada tutar.
+# Böylece her tıklamada Google'a gidip kota harcamaz.
+@st.cache_data(ttl=15)
+def get_cached_data():
     try:
         client = get_connection()
         sh = client.open(SHEET_ADI)
         w_veri = sh.worksheet("Veri")
         w_liste = sh.worksheet("Liste")
-        w_atlanan = sh.worksheet("Atlananlar")
         
+        # Tüm veriyi tek seferde çekiyoruz (En az maliyetli yöntem)
         data_veri = w_veri.get_all_values()
+        data_liste = w_liste.get_all_values()
+        
         headers = []
         if len(data_veri) > 1:
             headers = data_veri[1] 
         
-        data_liste = w_liste.get_all_values()
-        
-        # Son Kayıt Bulma
+        # Son Kayıt Bulma (Python tarafında yapıyoruz, API kullanmadan)
         son_kayit_isim = None
         try:
-            isimler = w_veri.col_values(5) 
-            dolu = [x for x in isimler[2:] if x.strip()]
-            if dolu: son_kayit_isim = dolu[-1]
+            # 5. sütun (Index 4) isim sütunu. Başlıkları atla.
+            isimler = [row[4] for row in data_veri[2:] if len(row) > 4 and row[4].strip()]
+            if isimler:
+                son_kayit_isim = isimler[-1]
         except: pass
         
-        return w_veri, w_atlanan, headers, data_liste, son_kayit_isim
+        return data_veri, headers, data_liste, son_kayit_isim
     except Exception as e:
-        st.error(f"Bağlantı Hatası: {e}")
-        return None, None, [], [], None
+        # Hata olursa None döndür
+        return None, [], [], None
+
+# --- YAZMA İŞLEMİ İÇİN SHEET NESNESİ ---
+def get_worksheet_objects():
+    client = get_connection()
+    sh = client.open(SHEET_ADI)
+    return sh.worksheet("Veri"), sh.worksheet("Atlananlar")
 
 # --- ANA AKIŞ ---
-w_veri, w_atlanan, headers, tum_veriler, son_kayit_isim = get_data()
+tum_veriler, headers, liste_verisi, son_kayit_isim = get_cached_data()
 
-# --- GÜVENLİ DEĞİŞKEN BAŞLATMA ---
-# Hatanın sebebi bu değişkenlerin tanımlanmamış olmasıydı.
+# Güvenli değişkenler
 secilen_isim = ""
 secilen_tarih_str = ""
 t_obj = datetime.now()
-secenekler = []
 
-if w_veri:
-    
-    # 1. SEÇİM ALANI
-    with st.container():
-        st.info(f"📝 Son Kayıt: **{son_kayit_isim if son_kayit_isim else 'Yok'}**")
-        
-        temiz_liste = []
-        # Veri kontrolü
-        if len(tum_veriler) > 3:
-            for row in tum_veriler[3:]:
-                if len(row) > 6:
-                    isim = str(row[4]).strip()
-                    tarih = str(row[6]).strip()
-                    if len(isim) > 2 and "Sütun" not in isim:
-                        temiz_liste.append({"isim": isim, "tarih": tarih})
-        
-        aday_listesi = []
-        if son_kayit_isim:
-            idx = -1
-            for i, h in enumerate(temiz_liste):
-                if h["isim"] == son_kayit_isim:
-                    idx = i
-                    break
-            if idx != -1:
-                s = max(0, idx - 5)
-                e = min(len(temiz_liste), idx + 10)
-                aday_listesi = temiz_liste[s:e]
-            else:
-                aday_listesi = temiz_liste[:15]
-        else:
-            aday_list
+if tum_ver
