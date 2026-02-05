@@ -279,7 +279,8 @@ if kaydet_btn:
                 yeni_satir.append("")
             else:
                 val = input_values.get(baslik, "")
-                if isinstance(val, (datetime, pd.Timestamp)):
+                # Tarih özelliği taşıyan her şeyi (Date veya Datetime) yakala
+                if hasattr(val, 'strftime'):
                     val = val.strftime("%d.%m.%Y")
                 yeni_satir.append(str(val))
         
@@ -303,4 +304,5 @@ if pas_gec_btn:
         st.rerun()
     except Exception as e:
         st.error(f"Hata: {e}")
+
 
