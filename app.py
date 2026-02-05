@@ -32,9 +32,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🏥 Dikey Hızlı Veri Girişi (v2.0)")
+st.title("🏥 Dikey Hızlı Veri Girişi (v2.3 - Full Otomatik)")
 
-# --- CHECKBOX OLMASI GEREKEN SÜTUNLARIN TAM LİSTESİ ---
+# --- CHECKBOX LİSTESİ ---
 CHECKBOX_LIST = [
     "1. Basamak Ybü", "2. Basamak Ybü", "3. Basamak Ybü", "Servis",
     "HT", "DM", "KBY", "KAH", "AF", "KOAH", "SVH", "Malignite", "KKY", "ALZHEİMER",
@@ -49,7 +49,7 @@ CHECKBOX_LIST = [
     "DEVİR", "Taburcu", "Ölüm", "T. RED"
 ]
 
-# --- GOOGLE SHEETS BAĞLANTISI ---
+# --- BAĞLANTI ---
 @st.cache_resource
 def get_connection():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -66,15 +66,12 @@ def get_data_v2():
         w_liste = sh.worksheet("Liste")
         w_atlanan = sh.worksheet("Atlananlar")
         
-        # Sütun Başlıklarını Veri Sayfasından Alıyoruz
+        # Veri sayfasındaki İsimlerin olduğu sütunu al (E sütunu - index 4)
         data_veri = w_veri.get_all_values()
         headers = []
-        processed_names = [] # Zaten işlenmiş isimler
-        
+        processed_names = []
         if len(data_veri) > 1:
-            headers = data_veri[1] # 2. Satır başlık kabul edildi
-            # Veri sayfasındaki İsimlerin olduğu sütunu (Örn: E sütunu / index 4) topluyoruz
-            # Senin verine göre E sütunu (index 4) isimdir.
+            headers = data_veri[1] 
             processed_names = [row[4].strip() for row in data_veri[2:] if len(row) > 4]
 
         # Atlananları Al
@@ -95,23 +92,34 @@ w_veri, w_atlanan, headers, ham_liste_verisi, processed_names, skipped_names = g
 
 if w_veri:
     
-    # 1. SEÇİM ALANI & FİLTRELEME
+    # 1. SEÇİM VE VERİ HAZIRLAMA
     with st.container():
         
-        # Filtreleme Mantığı:
-        # Liste sayfasındaki (ham_liste_verisi) isimleri al.
-        # Eğer isim 'processed_names' veya 'skipped_names' içindeyse listeye ekleme.
-        
         yapilacaklar = []
-        # ham_liste_verisi[1:] diyerek başlıktan sonrasını alıyoruz
-        for row in ham_liste_verisi[1:]:
-            if len(row) > 0:
-                # Varsayım: Liste sayfasında İsim A sütununda(0), Tarih B sütununda(1)
-                isim = str(row[0]).strip()
-                tarih = str(row[1]).strip() if len(row) > 1 else ""
+        
+        # Liste sayfasının 4. satırından itibaren oku (index 3)
+        for row in ham_liste_verisi[3:]:
+            if len(row) > 6: 
+                # E Sütunu (4) -> İsim
+                # G Sütunu (6) -> Tarih
+                # K Sütunu (10) -> Yatış Kararı Süresi
+                # L Sütunu (11) -> Transfer Süresi
                 
-                if isim and isim not in processed_names and isim not in skipped_names:
-                    yapilacaklar.append({"isim": isim, "tarih": tarih})
+                isim = str(row[4]).strip()
+                tarih = str(row[6]).strip()
+                
+                # Süre verilerini güvenli çek (eğer sütun doluysa)
+                sure_karar = str(row[10]).strip() if len(row) > 10 else "0"
+                sure_transfer = str(row[11]).strip() if len(row) > 11 else "0"
+                
+                if isim and "isim" not in isim.lower(): 
+                    if isim not in processed_names and isim not in skipped_names:
+                        yapilacaklar.append({
+                            "isim": isim, 
+                            "tarih": tarih,
+                            "sure_karar": sure_karar,
+                            "sure_transfer": sure_transfer
+                        })
         
         if not yapilacaklar:
             st.success("🎉 Tebrikler! Listedeki tüm hastalar tamamlandı.")
@@ -119,33 +127,37 @@ if w_veri:
             
         st.info(f"Kalan Hasta Sayısı: **{len(yapilacaklar)}**")
         
-        # Dropdown Hazırlığı
         secenekler = [f"{h['isim']} | {h['tarih']}" for h in yapilacaklar]
         secilen_str = st.selectbox("👇 Sıradaki Hasta:", secenekler)
         
         if secilen_str:
+            # Seçilen hastanın tüm verilerini bul
             secilen_isim = secilen_str.split(" | ")[0]
             secilen_tarih_str = secilen_str.split(" | ")[1]
+            
+            # Seçilen kişiye ait süreleri listesinden bul
+            secilen_data = next((item for item in yapilacaklar if item["isim"] == secilen_isim), None)
+            val_karar = secilen_data["sure_karar"] if secilen_data else "0"
+            val_transfer = secilen_data["sure_transfer"] if secilen_data else "0"
         else:
             st.stop()
 
-        # Tarih Parse Etme
+        # Tarih Formatlama
         t_obj = datetime.now()
         try:
-            # Tarih formatını temizle
             t_clean = secilen_tarih_str.split(' ')[0]
-            for fmt in ('%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y'):
+            for fmt in ('%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y', '%Y.%m.%d'):
                 try: t_obj = datetime.strptime(t_clean, fmt); break
                 except: pass
         except: pass
 
     st.markdown("---")
     
-    # 2. DİKEY VERİ GİRİŞ FORMU
+    # 2. OTOMATİK DOLDURMALI FORM
     input_values = {}
     
     with st.form("dikey_form", clear_on_submit=False):
-        st.write(f"### 📋 Veri Kartı: {secilen_isim}")
+        st.write(f"### 📋 Kayıt: {secilen_isim}")
         
         for i, baslik in enumerate(headers):
             if not baslik.strip(): continue
@@ -159,35 +171,45 @@ if w_veri:
             key_name = f"in_{i}_{baslik}"
             
             with c2:
-                # --- KURAL 1: CHECKBOX LİSTESİ ---
+                # --- CHECKBOXLAR ---
                 if baslik_temiz in CHECKBOX_LIST:
                     chk = st.checkbox("Evet / Var", key=key_name)
                     input_values[baslik] = 1 if chk else 0
                 
-                # --- KURAL 2: İSİM (Akıllı Eşleşme) ---
-                # İsim, Adı Soyadı, Hasta Adı gibi ifadeleri yakalar
+                # --- OTOMATİK DOLAN ALANLAR ---
+                
+                # 1. İsim
                 elif any(x in baslik_lower for x in ['isim', 'adı soyadı', 'hasta adı']):
                     input_values[baslik] = st.text_input("İsim", value=secilen_isim, key=key_name, label_visibility="collapsed")
                 
-                # --- KURAL 3: TARİH (Akıllı Eşleşme) ---
+                # 2. Tarih
                 elif "tarih" in baslik_lower:
                     input_values[baslik] = st.date_input("Tarih", value=t_obj, key=key_name, label_visibility="collapsed")
                 
-                # --- KURAL 4: CİNSİYET ---
+                # 3. YENİ: Yatış Kararı Süresi (Otomatik)
+                # Başlıkta "karar" ve "süre" geçiyorsa yakalar
+                elif "karar" in baslik_lower and "süre" in baslik_lower:
+                     input_values[baslik] = st.text_input("Süre", value=val_karar, key=key_name, label_visibility="collapsed")
+
+                # 4. YENİ: Transfer Süresi (Otomatik)
+                # Başlıkta "transfer" veya "transver" geçiyorsa yakalar
+                elif ("transfer" in baslik_lower or "transver" in baslik_lower) and "süre" in baslik_lower:
+                     input_values[baslik] = st.text_input("Süre", value=val_transfer, key=key_name, label_visibility="collapsed")
+                
+                # 5. Cinsiyet
                 elif "cinsiyet" in baslik_lower:
                     input_values[baslik] = st.selectbox("Cinsiyet", ["", "E", "K"], key=key_name, label_visibility="collapsed")
                 
-                # --- KURAL 5: SAYISAL ---
+                # 6. Diğer Sayısal Alanlar
                 elif any(x in baslik_lower for x in ['yaş', 'ateş', 'nabız', 'tansiyon', 'spo2']):
                     input_values[baslik] = st.number_input("Değer", value=0.0, step=1.0, format="%.2f", key=key_name, label_visibility="collapsed")
                 
-                # --- KURAL 6: NOTLAR ---
+                # 7. Not Alanları
                 elif any(x in baslik_lower for x in ['açıklama', 'not']):
                     input_values[baslik] = st.text_area("Not", height=68, key=key_name, label_visibility="collapsed")
                 
-                # --- KURAL 7: DİĞER (Varsayılan 0) ---
+                # 8. Geriye Kalan Her Şey
                 else:
-                    # Diğer metin alanları için varsayılan değer 0 string olarak
                     input_values[baslik] = st.text_input("Sonuç", value="0", key=key_name, label_visibility="collapsed")
             
             st.markdown("<div class='row-container'></div>", unsafe_allow_html=True)
@@ -197,10 +219,8 @@ if w_veri:
         col_submit, col_pass = st.columns([3, 1])
         kaydet_btn = col_submit.form_submit_button("✅ KAYDET", type="primary", use_container_width=True)
     
-    # Form dışı buton
     pas_gec_btn = st.button("🚫 BU HASTAYI PAS GEÇ", use_container_width=True)
 
-    # --- İŞLEMLER ---
     if kaydet_btn:
         try:
             yeni_satir = []
@@ -212,20 +232,17 @@ if w_veri:
                     if isinstance(val, (datetime, pd.Timestamp)): val = val.strftime("%d.%m.%Y")
                     yeni_satir.append(str(val))
             
-            # GÜVENLİ KAYIT: Append Row kullanıyoruz
             w_veri.append_row(yeni_satir)
-            
             st.success(f"✅ {secilen_isim} başarıyla kaydedildi!")
             time.sleep(1)
             st.rerun()
-            
         except Exception as e:
             st.error(f"Kayıt Hatası: {e}")
 
     if pas_gec_btn:
         try:
             w_atlanan.append_row([secilen_isim, secilen_tarih_str])
-            st.warning(f"⏩ {secilen_isim} pas geçildi (listeden düşüldü).")
+            st.warning(f"⏩ {secilen_isim} pas geçildi.")
             time.sleep(1)
             st.rerun()
         except Exception as e:
