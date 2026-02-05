@@ -29,10 +29,15 @@ st.markdown("""
         border-bottom: 1px solid #f0f2f6;
     }
     div[data-testid="stCheckbox"] { display: flex; align-items: center; }
+    /* Buton Stilleri */
+    .stButton>button {
+        border-radius: 8px;
+        transition: all 0.3s;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🏥 Dikey Hızlı Veri Girişi (v2.3 - Full Otomatik)")
+st.title("🏥 Dikey Hızlı Veri Girişi (v2.4 - Full + Undo)")
 
 # --- CHECKBOX LİSTESİ ---
 CHECKBOX_LIST = [
@@ -92,23 +97,47 @@ w_veri, w_atlanan, headers, ham_liste_verisi, processed_names, skipped_names = g
 
 if w_veri:
     
-    # 1. SEÇİM VE VERİ HAZIRLAMA
+    # 1. YENİ ÖZELLİK: GERİ AL BUTONU (SIDEBAR)
+    with st.sidebar:
+        st.header("⚙️ İşlemler")
+        st.markdown("Son yaptığınız kaydı silmek için:")
+        if st.button("⏪ SON KAYDI GERİ AL", type="secondary", use_container_width=True):
+            try:
+                all_values = w_veri.get_all_values()
+                # Başlık satırları (ilk 2 satır) hariç silme işlemi yap
+                if len(all_values) > 2:
+                    last_index = len(all_values)
+                    silinen_kisi = all_values[-1][4] # E sütunundaki isim
+                    w_veri.delete_rows(last_index)
+                    st.success(f"✅ Geri Alındı: {silinen_kisi}")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.warning("Silinecek veri kaydı bulunamadı.")
+            except Exception as e:
+                st.error(f"Hata: {e}")
+
+    # 2. SEÇİM VE VERİ HAZIRLAMA
     with st.container():
         
         yapilacaklar = []
         
         # Liste sayfasının 4. satırından itibaren oku (index 3)
         for row in ham_liste_verisi[3:]:
-            if len(row) > 6: 
+            if len(row) > 8: # En az I sütununa kadar veri var mı?
                 # E Sütunu (4) -> İsim
                 # G Sütunu (6) -> Tarih
+                # I Sütunu (8) -> Yatış Verilme Saati (YENİ)
                 # K Sütunu (10) -> Yatış Kararı Süresi
                 # L Sütunu (11) -> Transfer Süresi
                 
                 isim = str(row[4]).strip()
                 tarih = str(row[6]).strip()
                 
-                # Süre verilerini güvenli çek (eğer sütun doluysa)
+                # YENİ: Yatış Saati Okuma
+                yatis_saati = str(row[8]).strip() if len(row) > 8 else "Belirtilmemiş"
+
+                # Süre verilerini güvenli çek
                 sure_karar = str(row[10]).strip() if len(row) > 10 else "0"
                 sure_transfer = str(row[11]).strip() if len(row) > 11 else "0"
                 
@@ -117,6 +146,7 @@ if w_veri:
                         yapilacaklar.append({
                             "isim": isim, 
                             "tarih": tarih,
+                            "yatis_saati": yatis_saati, # Listeye eklendi
                             "sure_karar": sure_karar,
                             "sure_transfer": sure_transfer
                         })
@@ -135,10 +165,16 @@ if w_veri:
             secilen_isim = secilen_str.split(" | ")[0]
             secilen_tarih_str = secilen_str.split(" | ")[1]
             
-            # Seçilen kişiye ait süreleri listesinden bul
+            # Seçilen kişiye ait verileri çek
             secilen_data = next((item for item in yapilacaklar if item["isim"] == secilen_isim), None)
+            
             val_karar = secilen_data["sure_karar"] if secilen_data else "0"
             val_transfer = secilen_data["sure_transfer"] if secilen_data else "0"
+            val_saat = secilen_data["yatis_saati"] if secilen_data else "-"
+
+            # YENİ ÖZELLİK: SAATİ GÖSTER
+            st.warning(f"⏰ **Yatış Verilme Saati:** {val_saat}")
+
         else:
             st.stop()
 
@@ -153,7 +189,7 @@ if w_veri:
 
     st.markdown("---")
     
-    # 2. OTOMATİK DOLDURMALI FORM
+    # 3. OTOMATİK DOLDURMALI FORM
     input_values = {}
     
     with st.form("dikey_form", clear_on_submit=False):
@@ -186,13 +222,11 @@ if w_veri:
                 elif "tarih" in baslik_lower:
                     input_values[baslik] = st.date_input("Tarih", value=t_obj, key=key_name, label_visibility="collapsed")
                 
-                # 3. YENİ: Yatış Kararı Süresi (Otomatik)
-                # Başlıkta "karar" ve "süre" geçiyorsa yakalar
+                # 3. Yatış Kararı Süresi
                 elif "karar" in baslik_lower and "süre" in baslik_lower:
                      input_values[baslik] = st.text_input("Süre", value=val_karar, key=key_name, label_visibility="collapsed")
 
-                # 4. YENİ: Transfer Süresi (Otomatik)
-                # Başlıkta "transfer" veya "transver" geçiyorsa yakalar
+                # 4. Transfer Süresi
                 elif ("transfer" in baslik_lower or "transver" in baslik_lower) and "süre" in baslik_lower:
                      input_values[baslik] = st.text_input("Süre", value=val_transfer, key=key_name, label_visibility="collapsed")
                 
