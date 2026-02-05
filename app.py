@@ -258,7 +258,7 @@ with st.form("veri_giris_formu", clear_on_submit=False):
                 try:
                     current_val = float(st.session_state[key_id]) if st.session_state[key_id] else 0.0
                 except:
-                    current_val = 0
+                    current_val = 0.0
                 input_values[baslik] = st.number_input("Değer", value=current_val, step=1.0, format="%.2f", key=f"num_{i}", label_visibility="collapsed")
             
             # G. NOT / AÇIKLAMA
