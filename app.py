@@ -36,7 +36,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🏥 Dikey Hızlı Veri Girişi (v3.0 - Butonlu)")
+st.title("🏥 Dikey Hızlı Veri Girişi (v3.1 - Final)")
 
 # --- CHECKBOX LİSTESİ ---
 CHECKBOX_LIST = [
@@ -62,7 +62,7 @@ def get_connection():
     client = gspread.authorize(creds)
     return client
 
-def get_data_v3():
+def get_data_final():
     try:
         client = get_connection()
         sh = client.open(SHEET_ADI)
@@ -70,16 +70,19 @@ def get_data_v3():
         w_liste = sh.worksheet("Liste")
         w_atlanan = sh.worksheet("Atlananlar")
         
+        # Veri sayfasındaki başlıkları al
         data_veri = w_veri.get_all_values()
         headers = []
         processed_names = []
         if len(data_veri) > 1:
-            headers = [h.strip() for h in data_veri[1]] # Başlıklardaki boşlukları temizle
+            headers = data_veri[1] # Başlık satırı
             processed_names = [row[4].strip() for row in data_veri[2:] if len(row) > 4]
 
+        # Atlananları al
         data_atlanan = w_atlanan.get_all_values()
         skipped_names = [row[0].strip() for row in data_atlanan if len(row) > 0]
 
+        # Yapılacaklar listesini al
         data_liste = w_liste.get_all_values()
         
         return w_veri, w_atlanan, headers, data_liste, processed_names, skipped_names
@@ -88,14 +91,15 @@ def get_data_v3():
         st.error(f"Bağlantı Hatası: {e}")
         return None, None, [], [], [], []
 
-# --- SESSION STATE (Form Verilerini Tutmak İçin) ---
+# --- SESSION STATE ---
+# Form verilerini hafızada tutmak için
 if 'form_isim' not in st.session_state: st.session_state['form_isim'] = ""
 if 'form_karar' not in st.session_state: st.session_state['form_karar'] = "0"
 if 'form_transfer' not in st.session_state: st.session_state['form_transfer'] = "0"
 if 'form_tarih' not in st.session_state: st.session_state['form_tarih'] = datetime.now()
 
 # --- ANA AKIŞ ---
-w_veri, w_atlanan, headers, ham_liste_verisi, processed_names, skipped_names = get_data_v3()
+w_veri, w_atlanan, headers, ham_liste_verisi, processed_names, skipped_names = get_data_final()
 
 if w_veri:
     
@@ -113,19 +117,26 @@ if w_veri:
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.warning("Silinecek kayıt yok.")
+                    st.warning("Silinecek kayıt bulunamadı.")
             except Exception as e:
                 st.error(f"Hata: {e}")
 
     # --- SEÇİM ALANI ---
     with st.container():
         yapilacaklar = []
+        # Liste sayfasının 4. satırından itibaren oku (index 3)
         for row in ham_liste_verisi[3:]:
-            if len(row) > 8:
+            if len(row) > 8: # Veri var mı kontrolü
                 isim = str(row[4]).strip()
                 tarih = str(row[6]).strip()
+                
+                # I Sütunu (Index 8) -> Yatış Saati
                 yatis_saati = str(row[8]).strip() if len(row) > 8 else "-"
+                
+                # K Sütunu (Index 10) -> Karar Süresi
                 sure_karar = str(row[10]).strip() if len(row) > 10 else "0"
+                
+                # L Sütunu (Index 11) -> Transfer Süresi
                 sure_transfer = str(row[11]).strip() if len(row) > 11 else "0"
                 
                 if isim and "isim" not in isim.lower(): 
@@ -139,33 +150,33 @@ if w_veri:
                         })
         
         if not yapilacaklar:
-            st.success("🎉 Tüm hastalar bitti!")
+            st.success("🎉 Harika! Tüm liste tamamlandı.")
             st.stop()
             
-        st.info(f"Kalan Hasta: **{len(yapilacaklar)}**")
+        st.info(f"Kalan Hasta Sayısı: **{len(yapilacaklar)}**")
         
         secenekler = [f"{h['isim']} | {h['tarih']}" for h in yapilacaklar]
         secilen_str = st.selectbox("👇 Sıradaki Hasta:", secenekler)
         
-        # Seçilen verileri bul
+        # Seçilen verileri çek
         secilen_isim = secilen_str.split(" | ")[0]
         secilen_data = next((item for item in yapilacaklar if item["isim"] == secilen_isim), None)
+        
         raw_tarih = secilen_data["tarih"]
         val_saat = secilen_data["yatis_saati"]
         val_karar = secilen_data["sure_karar"]
         val_transfer = secilen_data["sure_transfer"]
 
-        # YATIŞ SAATİ BİLGİSİ
+        # SAAT BİLGİSİ EKRANI
         st.warning(f"⏰ **Yatış Verilme Saati:** {val_saat}")
 
-        # --- VERİLERİ DOLDUR BUTONU ---
-        # Bu buton tıklandığında Session State güncellenir ve form o verilerle dolar
+        # --- VERİLERİ GETİR BUTONU ---
         if st.button("⬇️ VERİLERİ GETİR / DOLDUR", type="primary", use_container_width=True):
             st.session_state['form_isim'] = secilen_isim
             st.session_state['form_karar'] = val_karar
             st.session_state['form_transfer'] = val_transfer
             
-            # Tarih Çevirme İşlemi
+            # Tarih formatını düzeltme
             t_obj = datetime.now()
             try:
                 t_clean = raw_tarih.split(' ')[0]
@@ -177,11 +188,11 @@ if w_veri:
             except: pass
             st.session_state['form_tarih'] = t_obj
             
-            st.rerun() # Sayfayı yenile ki form güncel verilerle açılsın
+            st.rerun()
 
     st.markdown("---")
     
-    # --- FORM ---
+    # --- FORM ALANI ---
     input_values = {}
     
     with st.form("dikey_form", clear_on_submit=False):
@@ -190,35 +201,41 @@ if w_veri:
         for i, baslik in enumerate(headers):
             if not baslik: continue
             
-            # Başlık Temizliği (Checkbox eşleşmesi için kritik)
-            baslik_clean = baslik.strip() # Boşlukları sil
-            baslik_lower = baslik_clean.lower()
+            # --- BAŞLIK TEMİZLİĞİ VE EŞLEŞTİRME ---
+            # 1. Alt satır karakterlerini boşluğa çevir (Örn: "Karar\nSüresi" -> "Karar Süresi")
+            baslik_clean = baslik.strip().replace("\n", " ")
             
+            # 2. Türkçe karakterleri düzelt ve küçült
+            baslik_lower = baslik_clean.replace("İ", "i").replace("I", "ı").lower()
+            
+            # Görsel Düzen
             c1, c2 = st.columns([1.5, 3])
             c1.markdown(f"<div class='etiket-box'>{baslik_clean}:</div>", unsafe_allow_html=True)
             
             key_name = f"in_{i}_{baslik_clean}"
             
             with c2:
-                # 1. CHECKBOX KONTROLÜ (Daha esnek hale getirildi)
-                # Listede var mı diye bakarken hem listedekini hem başlıktakini temizliyoruz.
+                # 1. CHECKBOX KONTROLÜ
+                # Checkbox listesindeki her öğeyi temizleyerek karşılaştırır
                 if baslik_clean in [x.strip() for x in CHECKBOX_LIST]: 
                     chk = st.checkbox("Evet / Var", key=key_name)
                     input_values[baslik] = 1 if chk else 0
                 
-                # 2. İSİM (Otomatik Buton ile Dolar)
+                # 2. İSİM ALANI
                 elif any(x in baslik_lower for x in ['isim', 'adı soyadı', 'hasta adı']):
                     input_values[baslik] = st.text_input("İsim", key="form_isim_input", value=st.session_state['form_isim'], label_visibility="collapsed")
                 
-                # 3. TARİH (Otomatik Buton ile Dolar)
+                # 3. TARİH ALANI
                 elif "tarih" in baslik_lower:
                     input_values[baslik] = st.date_input("Tarih", key="form_tarih_input", value=st.session_state['form_tarih'], label_visibility="collapsed")
                 
-                # 4. YATIŞ KARAR SÜRESİ (Otomatik Buton ile Dolar)
+                # 4. YATIŞ KARAR SÜRESİ
+                # Hem "karar" hem "süre" kelimesi geçiyorsa buraya girer
                 elif "karar" in baslik_lower and "süre" in baslik_lower:
                      input_values[baslik] = st.text_input("Süre", key="form_karar_input", value=st.session_state['form_karar'], label_visibility="collapsed")
 
-                # 5. TRANSFER SÜRESİ (Otomatik Buton ile Dolar)
+                # 5. TRANSFER SÜRESİ
+                # Hem ("transfer" ya da hatalı yazım "transver") hem de "süre" geçiyorsa
                 elif ("transfer" in baslik_lower or "transver" in baslik_lower) and "süre" in baslik_lower:
                      input_values[baslik] = st.text_input("Süre", key="form_transfer_input", value=st.session_state['form_transfer'], label_visibility="collapsed")
                 
@@ -234,7 +251,7 @@ if w_veri:
                 elif any(x in baslik_lower for x in ['açıklama', 'not']):
                     input_values[baslik] = st.text_area("Not", height=68, key=key_name, label_visibility="collapsed")
                 
-                # 9. Diğerleri
+                # 9. Diğer Tüm Alanlar
                 else:
                     input_values[baslik] = st.text_input("Sonuç", value="0", key=key_name, label_visibility="collapsed")
             
@@ -247,6 +264,7 @@ if w_veri:
     
     pas_gec_btn = st.button("🚫 BU HASTAYI PAS GEÇ", use_container_width=True)
 
+    # --- KAYIT İŞLEMİ ---
     if kaydet_btn:
         try:
             yeni_satir = []
@@ -259,19 +277,16 @@ if w_veri:
                     yeni_satir.append(str(val))
             
             w_veri.append_row(yeni_satir)
-            st.success(f"✅ {st.session_state['form_isim']} başarıyla kaydedildi!")
-            
-            # Kayıttan sonra form temizlensin istersen bunları sıfırlayabilirsin:
-            # st.session_state['form_isim'] = ""
-            
+            st.success(f"✅ {st.session_state['form_isim']} kaydedildi!")
             time.sleep(1)
             st.rerun()
         except Exception as e:
             st.error(f"Kayıt Hatası: {e}")
 
+    # --- PAS GEÇ İŞLEMİ ---
     if pas_gec_btn:
         try:
-            w_atlanan.append_row([secilen_isim, secilen_tarih_str])
+            w_atlanan.append_row([secilen_isim, secilen_str.split(" | ")[1]])
             st.warning(f"⏩ {secilen_isim} pas geçildi.")
             time.sleep(1)
             st.rerun()
