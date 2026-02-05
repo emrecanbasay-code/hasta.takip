@@ -32,9 +32,14 @@ CHECKBOX_LIST = [
     "1. Basamak Ybü", "2. Basamak Ybü", "3. Basamak Ybü", "Servis",
     "HT", "DM", "KBY", "KAH", "AF", "KOAH", "SVH", "Malignite", "KKY", "ALZHEİMER",
     "Entübasyon", "İnotrop", "Mükerrer tetkik Ya da tedavi istemi", 
-    "KOAG", "TİT", "TROP", "Hmg", "Bk", "Kan Gazı", "MALİYET", "Cr", "Ct", "Mr", "Usg",
-    "DEVİR", "Taburcu", "Ölüm", "T. RED", 
-    "08.00-16.00", "16.00-24.00", "00.00-08.00"
+    "Kesin tanı koyulamaması", "8 saati aşıp yatmaması", "Birden fazla kliniği ilgilendirmesi",
+    "KOAG", "TİT", "TROP", "Hmg", "Bk", "Kan Gazı", "MALİYET", 
+    "Cr", "Ct", "Mr", "Usg",
+    "Dahilye", "Göğüs Hast", "Genel Cerrahi", "Nrş", "KVC", "Kbb", "Plastik", "Göz", 
+    "Üroloji", "Göğüs C.", "Kardiyoloji", "Nöroloji", "Göğüs H.", "Enfeksiyon H.", 
+    "Psikiyatri", "Cildiye", "Anestezi", "Radyoloji",
+    "08.00-16.00", "16.00-24.00", "00.00-08.00",
+    "DEVİR", "Taburcu", "Ölüm", "T. RED"
 ]
 
 # --- B. OTOMATİK "0" GELECEK OLANLAR (SAYI GİRİŞİ) ---
@@ -298,3 +303,4 @@ if pas_gec_btn:
         st.rerun()
     except Exception as e:
         st.error(f"Hata: {e}")
+
