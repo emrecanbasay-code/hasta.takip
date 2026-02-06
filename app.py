@@ -33,7 +33,7 @@ CHECKBOX_LIST = [
     "HT", "DM", "KBY", "KAH", "AF", "KOAH", "SVH", "Malignite", "KKY", "ALZHEİMER",
     "Entübasyon", "İnotrop", "Mükerrer tetkik Ya da tedavi istemi", 
     "Kesin tanı koyulamaması", "8 saati aşıp yatmaması", "Birden fazla kliniği ilgilendirmesi",
-    "KOAG", "TİT", "TROP", "Hmg", "Bk", "Kan Gazı", "MALİYET", 
+    "KOAG", "TİT", "TROP", "Hmg", "Bk", "Kan Gazı",  
     "Cr", "Ct", "Mr", "Usg",
     "Dahilye", "Göğüs Hast", "Genel Cerrahi", "Nrş", "KVC", "Kbb", "Plastik", "Göz", 
     "Üroloji", "Göğüs C.", "Kardiyoloji", "Nöroloji", "Göğüs H.", "Enfeksiyon H.", 
@@ -46,9 +46,9 @@ CHECKBOX_LIST = [
 # Senin verdiğin liste buraya eklendi. Başlangıçta 0 yazar.
 SIFIR_LIST = [
     "Sıra Numarası", 
-    "Kesin tanı koyulamaması", 
-    "8 saati aşıp yatmaması", 
-    "Birden fazla kliniği ilgilendirmesi", 
+    
+    
+    
     "Yapılan Kolsültasyon sayısı", 
     "1Dahilye", "1Göğüs Hast", "1Genel Cerrahi", "1Nrş", "1KVC", 
     "1Kbb", "1Plastik", "1Göz", "1Üroloji", "1Göğüs C.", 
@@ -304,5 +304,6 @@ if pas_gec_btn:
         st.rerun()
     except Exception as e:
         st.error(f"Hata: {e}")
+
 
 
