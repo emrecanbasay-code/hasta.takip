@@ -45,6 +45,9 @@ CHECKBOX_LIST = [
 # --- B. OTOMATİK "0" GELECEK OLANLAR (SAYI GİRİŞİ) ---
 SIFIR_LIST = [
     "Sıra Numarası", 
+    "1Servis", 
+    "Ybü", 
+    "Toplam", 
     "Yapılan Kolsültasyon sayısı", 
     "1Dahilye", "1Göğüs Hast", "1Genel Cerrahi", "1Nrş", "1KVC", 
     "1Kbb", "1Plastik", "1Göz", "1Üroloji", "1Göğüs C.", 
@@ -300,3 +303,4 @@ if pas_gec_btn:
         st.rerun()
     except Exception as e:
         st.error(f"Hata: {e}")
+
