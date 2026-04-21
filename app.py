@@ -22,7 +22,6 @@ st.markdown("""
     .row-container { padding: 4px 0; border-bottom: 1px solid #eee; }
     div[data-testid="stCheckbox"] { display: flex; align-items: center; }
     .stButton>button { border-radius: 5px; font-weight: bold; }
-    .checkbox-group { padding: 2px 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -66,9 +65,7 @@ SABIT_DEGERLER = {
     "gks": 15
 }
 
-# --- D. SEKME GRUPLARI ---
-# Her başlık hangi sekmeye ait olacak? Eşleşme fonksiyonu ile belirlenir.
-
+# --- D. GRUPLAR ---
 KOMORBIDITE_CHECKBOXES = ["HT", "DM", "KBY", "KAH", "AF", "KOAH", "SVH", "Malignite", "KKY", "ALZHEİMER"]
 YATIS_YERI_CHECKBOXES = ["1. Basamak Ybü", "2. Basamak Ybü", "3. Basamak Ybü", "Servis"]
 MUDAHALE_CHECKBOXES = ["Entübasyon", "İnotrop"]
@@ -86,6 +83,10 @@ MESAI_CHECKBOXES = ["08.00-16.00", "16.00-24.00", "00.00-08.00"]
 SONUC_CHECKBOXES = ["DEVİR", "Taburcu", "Ölüm", "T. RED"]
 
 VITAL_KEYWORDS = ["ateş", "nabız", "sistolik tansiyon", "diyastolik tansiyon", "spo2", "gks"]
+
+# Otomatik hesaplanacak alanlar (form içinde widget gösterilmeyecek)
+OTOMATIK_HESAPLANAN = ["Toplam", "Yapılan Kolsültasyon sayısı"]
+
 
 def baslik_sekme_belirle(baslik):
     """Her başlığın hangi sekmeye ait olduğunu belirler."""
@@ -107,8 +108,6 @@ def baslik_sekme_belirle(baslik):
         return "tetkik"
     if baslik in KONSULTASYON_CHECKBOXES or baslik in KONSULTASYON_SAYI_LIST:
         return "konsultasyon"
-    if "yapılan kolsültasyon" in b_lower or "toplam" in b_lower:
-        return "konsultasyon"
     if baslik in MESAI_CHECKBOXES:
         return "mesai"
     if baslik in SONUC_CHECKBOXES:
@@ -126,7 +125,6 @@ def mesai_saati_belirle(saat_str):
     """Yatış saatine göre hangi mesai diliminin seçilmesi gerektiğini belirler."""
     try:
         saat_str = saat_str.strip()
-        # Farklı saat formatlarını dene
         for fmt in ["%H:%M", "%H.%M", "%H:%M:%S"]:
             try:
                 t = datetime.strptime(saat_str, fmt)
@@ -301,12 +299,17 @@ sekme_basliklar = {
 for i, baslik in enumerate(headers):
     if not baslik.strip():
         continue
+    # Otomatik hesaplanan alanları atla (form'da gösterilmeyecek)
+    if baslik in OTOMATIK_HESAPLANAN:
+        continue
     sekme = baslik_sekme_belirle(baslik)
     sekme_basliklar[sekme].append((i, baslik))
 
-# Session state başlatma (tüm alanlar için)
+# Session state başlatma (tüm alanlar için, form dışında)
 for i, baslik in enumerate(headers):
     if not baslik.strip():
+        continue
+    if baslik in OTOMATIK_HESAPLANAN:
         continue
     key_id = f"input_{i}"
     b_lower = baslik.lower().replace("İ", "i").replace("I", "ı").strip()
@@ -344,7 +347,7 @@ def render_alan(i, baslik):
             else:
                 return st.number_input("Sayı", value=int(val), step=1, format="%d", key=key_id, label_visibility="collapsed")
     
-    # 2. CHECKBOX (bu fonksiyon checkbox grupları dışında kalan tekil checkbox'lar için)
+    # 2. CHECKBOX
     elif baslik in CHECKBOX_LIST:
         c1, c2 = st.columns([1.5, 3])
         c1.markdown(f"<div class='etiket-box'>{baslik}:</div>", unsafe_allow_html=True)
@@ -444,7 +447,6 @@ with st.form("veri_giris", clear_on_submit=False):
             yatis_items = [(i, b) for i, b in sekme_basliklar["yatis"] if b in YATIS_YERI_CHECKBOXES]
             if yatis_items:
                 input_values.update(render_checkbox_grubu(yatis_items, kolon_sayisi=4))
-            # Yatış ile ilgili checkbox olmayan alanlar
             for i, baslik in sekme_basliklar["yatis"]:
                 if baslik not in YATIS_YERI_CHECKBOXES:
                     input_values[baslik] = render_alan(i, baslik)
@@ -493,7 +495,9 @@ with st.form("veri_giris", clear_on_submit=False):
         st.markdown("---")
         st.markdown("**Konsültasyon Sayıları**")
         for i, baslik in sekme_basliklar["konsultasyon"]:
-            if baslik in KONSULTASYON_SAYI_LIST or baslik not in KONSULTASYON_CHECKBOXES:
+            if baslik in KONSULTASYON_SAYI_LIST:
+                input_values[baslik] = render_alan(i, baslik)
+            elif baslik not in KONSULTASYON_CHECKBOXES:
                 input_values[baslik] = render_alan(i, baslik)
     
     # ---- SEKME 6: MESAİ & SONUÇ ----
@@ -509,7 +513,6 @@ with st.form("veri_giris", clear_on_submit=False):
             sonuc_cb_items = [(i, b) for i, b in sekme_basliklar["sonuc"] if b in SONUC_CHECKBOXES]
             if sonuc_cb_items:
                 input_values.update(render_checkbox_grubu(sonuc_cb_items, kolon_sayisi=4))
-            # Checkbox olmayan sonuç alanları (açıklama, not vb.)
             for i, baslik in sekme_basliklar["sonuc"]:
                 if baslik not in SONUC_CHECKBOXES:
                     input_values[baslik] = render_alan(i, baslik)
@@ -520,33 +523,6 @@ with st.form("veri_giris", clear_on_submit=False):
         for i, baslik in sekme_basliklar["diger"]:
             input_values[baslik] = render_alan(i, baslik)
 
-    # ==========================================
-    # OTOMATİK HESAPLAMALAR
-    # ==========================================
-    # Konsültasyon checkbox'larından toplam hesapla
-    konsultasyon_toplam = sum(1 for b in KONSULTASYON_CHECKBOXES if input_values.get(b, 0) == 1)
-    
-    # "Yapılan Kolsültasyon sayısı" alanını otomatik güncelle
-    for i, baslik in enumerate(headers):
-        if baslik == "Yapılan Kolsültasyon sayısı":
-            key_id = f"input_{i}"
-            st.session_state[key_id] = konsultasyon_toplam
-            input_values[baslik] = konsultasyon_toplam
-    
-    # "Toplam" alanını hesapla (1Servis + Ybü)
-    servis_val = input_values.get("1Servis", 0)
-    ybu_val = input_values.get("Ybü", 0)
-    try:
-        toplam_hesap = int(servis_val) + int(ybu_val)
-    except:
-        toplam_hesap = 0
-    
-    for i, baslik in enumerate(headers):
-        if baslik == "Toplam":
-            key_id = f"input_{i}"
-            st.session_state[key_id] = toplam_hesap
-            input_values[baslik] = toplam_hesap
-
     st.markdown("---")
     c_btn1, c_btn2 = st.columns([3, 1])
     kaydet_btn = c_btn1.form_submit_button("✅ VERİYİ KAYDET", type="primary", use_container_width=True)
@@ -554,16 +530,32 @@ with st.form("veri_giris", clear_on_submit=False):
 pas_gec_btn = st.button("🚫 PAS GEÇ", use_container_width=True)
 
 # ==========================================
-# 6. KAYIT
+# 6. KAYIT (OTOMATİK HESAPLAMALAR BURADA)
 # ==========================================
 if kaydet_btn:
     try:
+        # --- Otomatik Hesaplamalar (form dışında, kayıt anında) ---
+        # Konsültasyon checkbox'larından toplam hesapla
+        konsultasyon_toplam = sum(1 for b in KONSULTASYON_CHECKBOXES if input_values.get(b, 0) == 1)
+        input_values["Yapılan Kolsültasyon sayısı"] = konsultasyon_toplam
+        
+        # Toplam = 1Servis + Ybü
+        try:
+            servis_val = int(input_values.get("1Servis", 0))
+            ybu_val = int(input_values.get("Ybü", 0))
+            input_values["Toplam"] = servis_val + ybu_val
+        except:
+            input_values["Toplam"] = 0
+
+        # --- Satır Oluşturma ---
         yeni_satir = []
         for baslik in headers:
             if not baslik.strip():
                 yeni_satir.append("")
             else:
                 val = input_values.get(baslik, "")
+                if val == "" and baslik in SIFIR_LIST:
+                    val = 0
                 if hasattr(val, 'strftime'):
                     val = val.strftime("%d.%m.%Y")
                 yeni_satir.append(str(val))
