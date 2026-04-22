@@ -27,6 +27,24 @@ st.markdown("""
 
 st.title("🏥 Dikey Hızlı Veri Girişi (v14)")
 
+# --- Sayfa başına kaydırma fonksiyonu ---
+def sayfa_basina_kaydir():
+    st.markdown(
+        """<script>
+            window.parent.document.querySelector('section.main').scrollTo(0, 0);
+            window.scrollTo(0, 0);
+        </script>""",
+        unsafe_allow_html=True
+    )
+    # Alternatif yöntem: st.components kullanarak
+    import streamlit.components.v1 as components
+    components.html(
+        """<script>
+            window.parent.document.querySelector('section.main').scrollTo({top: 0, behavior: 'smooth'});
+        </script>""",
+        height=0
+    )
+
 # --- A. CHECKBOX OLACAKLAR (EVET/HAYIR) ---
 CHECKBOX_LIST = [
     "1. Basamak Ybü", "2. Basamak Ybü", "3. Basamak Ybü", "Servis",
@@ -382,6 +400,7 @@ if kaydet_btn:
             if key.startswith("input_") or key.startswith("num_"): 
                 del st.session_state[key]
         
+        sayfa_basina_kaydir()
         time.sleep(1)
         st.rerun()
     except Exception as e:
@@ -391,6 +410,7 @@ if pas_eksik_btn:
     try:
         w_atlanan.append_row([secilen_ad, datetime.now().strftime("%Y-%m-%d"), "Veri Eksik"])
         st.warning(f"⏩ {secilen_ad} atlandı. (Sebep: Veri Eksik)")
+        sayfa_basina_kaydir()
         time.sleep(1)
         st.rerun()
     except Exception as e:
@@ -400,6 +420,7 @@ if pas_sevk_btn:
     try:
         w_atlanan.append_row([secilen_ad, datetime.now().strftime("%Y-%m-%d"), "Dışarıya Sevk"])
         st.warning(f"⏩ {secilen_ad} atlandı. (Sebep: Dışarıya Sevk)")
+        sayfa_basina_kaydir()
         time.sleep(1)
         st.rerun()
     except Exception as e:
