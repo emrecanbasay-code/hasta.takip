@@ -57,7 +57,7 @@ CHECKBOX_LIST = [
     "Üroloji", "Göğüs C.", "Kardiyoloji", "Nöroloji", "Göğüs H.", "Enfeksiyon H.", 
     "Psikiyatri", "Cildiye", "Anestezi", "Radyoloji",
     "08.00-16.00", "16.00-24.00", "00.00-08.00",
-    "DEVİR", "Taburcu", "Ölüm", "T. RED"
+    "DEVİR", "Taburcu", "Ölüm", "T. RED", "KDH"
 ]
 
 # --- B. OTOMATİK "0" GELECEK OLANLAR (SAYI GİRİŞİ) ---
@@ -70,7 +70,7 @@ SIFIR_LIST = [
     "1Dahilye", "1Göğüs Hast", "1Genel Cerrahi", "1Nrş", "1KVC", 
     "1Kbb", "1Plastik", "1Göz", "1Üroloji", "1Göğüs C.", 
     "1Kardiyoloji", "1Nöroloji", "1Orto", "1Enfeksiyon H.", 
-    "1Psikiyatri", "1Cildiye", "1Anestezi", "1Radyoloji"
+    "1Psikiyatri", "1Cildiye", "1Anestezi", "1Radyoloji", "1KDH"
 ]
 
 # --- C. YENİ: VARSAYILAN SABİT DEĞERLER ---
