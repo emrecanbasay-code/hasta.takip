@@ -8,7 +8,7 @@ import pandas as pd
 # ==========================================
 # 1. AYARLAR VE STİL
 # ==========================================
-st.set_page_config(page_title="Pro Hasta Takip v13", layout="centered", page_icon="🏥")
+st.set_page_config(page_title="Pro Hasta Takip v14", layout="centered", page_icon="🏥")
 
 st.markdown("""
 <style>
@@ -25,7 +25,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🏥 Dikey Hızlı Veri Girişi (v13)")
+st.title("🏥 Dikey Hızlı Veri Girişi (v14)")
 
 # --- A. CHECKBOX OLACAKLAR (EVET/HAYIR) ---
 CHECKBOX_LIST = [
@@ -56,7 +56,6 @@ SIFIR_LIST = [
 ]
 
 # --- C. YENİ: VARSAYILAN SABİT DEĞERLER ---
-# Başlıklar küçük harfe göre kontrol edileceği için buraya küçük harfle yazdık.
 SABIT_DEGERLER = {
     "ateş": 36.5,
     "sistolik tansiyon": 120,
@@ -95,10 +94,10 @@ def verileri_hazirla():
         final_header = v2 if v2 else v1
         headers.append(final_header.replace("\n", " ").strip())
         
-    return w_veri, w_atlanan, headers, w_liste.get_all_values()
+    return w_veri, w_atlanan, headers, w_liste, w_liste.get_all_values()
 
 try:
-    w_veri, w_atlanan, headers, liste_rows = verileri_hazirla()
+    w_veri, w_atlanan, headers, w_liste, liste_rows = verileri_hazirla()
 except Exception as e:
     st.error(f"Bağlantı Hatası: {e}"); st.stop()
 
@@ -119,11 +118,82 @@ with st.sidebar:
             st.warning("Veri yok.")
 
 # ==========================================
+# YARDIMCI FONKSİYON: Yatış saatine göre
+# hangi vardiya checkbox'ının seçileceğini belirle
+# ==========================================
+def yatis_saatinden_vardiya_belirle(saat_str):
+    """
+    Yatış saati string'ini parse edip hangi vardiya checkbox'ının
+    işaretleneceğini döndürür.
+    Vardiyalar:
+      08.00-16.00 -> saat 08:00 - 15:59
+      16.00-24.00 -> saat 16:00 - 23:59
+      00.00-08.00 -> saat 00:00 - 07:59
+    """
+    if not saat_str or saat_str.strip() in ("-", ""):
+        return None
+    
+    saat_str = saat_str.strip()
+    
+    # Farklı saat formatlarını dene
+    saat_num = None
+    for fmt in ["%H:%M", "%H.%M", "%H:%M:%S", "%H.%M.%S"]:
+        try:
+            t = datetime.strptime(saat_str, fmt)
+            saat_num = t.hour
+            break
+        except ValueError:
+            continue
+    
+    # Eğer yukarıdaki formatlar tutmadıysa, sadece saat kısmını almayı dene
+    if saat_num is None:
+        try:
+            # "08", "16" gibi sadece saat
+            saat_num = int(saat_str.split(":")[0].split(".")[0].strip())
+        except (ValueError, IndexError):
+            return None
+    
+    if 8 <= saat_num < 16:
+        return "08.00-16.00"
+    elif 16 <= saat_num < 24:
+        return "16.00-24.00"
+    else:  # 0 <= saat_num < 8
+        return "00.00-08.00"
+
+
+# ==========================================
+# YARDIMCI FONKSİYON: LİSTE sekmesinden
+# kaydedilen hastayı satır numarasıyla sil
+# ==========================================
+def listeden_hasta_sil(hasta_isim, w_liste_sheet):
+    """
+    LİSTE sekmesinde hasta ismini bulup o satırı siler.
+    Satır 4'ten itibaren arar (ilk 3 satır başlık).
+    """
+    try:
+        tum_satirlar = w_liste_sheet.get_all_values()
+        for idx, row in enumerate(tum_satirlar):
+            if idx < 3:  # İlk 3 satır başlık, atla
+                continue
+            if len(row) > 4:
+                liste_isim = str(row[4]).strip()
+                if liste_isim == hasta_isim.strip():
+                    # gspread satır numarası 1-indexed, idx 0-indexed
+                    w_liste_sheet.delete_rows(idx + 1)
+                    return True
+        return False
+    except Exception as e:
+        st.warning(f"Liste silme hatası: {e}")
+        return False
+
+
+# ==========================================
 # 4. HASTA SEÇİMİ
 # ==========================================
 with st.container():
     yapilacaklar = []
-    for row in liste_rows[3:]:
+    # Her hasta için LİSTE'deki satır indexini de saklayalım
+    for row_idx, row in enumerate(liste_rows[3:], start=3):
         if len(row) > 10:
             p_isim = str(row[4]).strip()
             if p_isim and "isim" not in p_isim.lower():
@@ -132,7 +202,8 @@ with st.container():
                     "tarih": str(row[6]).strip(),
                     "saat": str(row[8]).strip() if len(row) > 8 else "-",
                     "karar": str(row[10]).strip(),
-                    "transfer": str(row[11]).strip()
+                    "transfer": str(row[11]).strip(),
+                    "liste_satir_idx": row_idx  # 0-indexed satır numarası
                 })
 
     if not yapilacaklar:
@@ -160,6 +231,9 @@ with st.container():
             try: t_obj = datetime.strptime(d_str, "%d.%m.%Y")
             except: pass
 
+        # --- YATIŞ SAATİNE GÖRE VARDİYA CHECKBOX'INI OTOMATİK İŞARETLE ---
+        vardiya = yatis_saatinden_vardiya_belirle(secilen_veri['saat'])
+        
         for idx, h in enumerate(headers):
             h_cl = h.lower().replace("İ", "i").replace("I", "ı")
             key_id = f"input_{idx}"
@@ -172,8 +246,14 @@ with st.container():
                 st.session_state[key_id] = secilen_veri['karar']
             elif ("transfer" in h_cl or "transver" in h_cl) and "süre" in h_cl:
                 st.session_state[key_id] = secilen_veri['transfer']
+            # Vardiya checkbox'larını otomatik işaretle
+            elif h in ("08.00-16.00", "16.00-24.00", "00.00-08.00"):
+                if vardiya and h == vardiya:
+                    st.session_state[key_id] = True
+                else:
+                    st.session_state[key_id] = False
 
-        st.toast("Bilgiler çekildi!", icon="✅")
+        st.toast("Bilgiler çekildi! Yatış saati vardiyası otomatik işaretlendi.", icon="✅")
 
 st.markdown("---")
 
@@ -267,7 +347,11 @@ with st.form("veri_giris", clear_on_submit=False):
     c_btn1, c_btn2 = st.columns([3, 1])
     kaydet_btn = c_btn1.form_submit_button("✅ VERİYİ KAYDET", type="primary", use_container_width=True)
 
-pas_gec_btn = st.button("🚫 PAS GEÇ", use_container_width=True)
+# --- PAS GEÇ: İki seçenekli ---
+st.markdown("#### 🚫 Pas Geç")
+pas_col1, pas_col2 = st.columns(2)
+pas_eksik_btn = pas_col1.button("📋 VERİ EKSİK", use_container_width=True)
+pas_sevk_btn = pas_col2.button("🚑 DIŞARIYA SEVK", use_container_width=True)
 
 # ==========================================
 # 6. KAYIT
@@ -285,20 +369,37 @@ if kaydet_btn:
                 yeni_satir.append(str(val))
         
         w_veri.append_row(yeni_satir)
-        st.success("✅ Kaydedildi!")
         
-        for key in st.session_state.keys():
-            if key.startswith("input_") or key.startswith("num_"): del st.session_state[key]
+        # --- YENİ: KAYIT SONRASI LİSTE SEKMESİNDEN HASTAYI SİL ---
+        silme_basarili = listeden_hasta_sil(secilen_ad, w_liste)
+        
+        if silme_basarili:
+            st.success("✅ Kaydedildi ve listeden silindi!")
+        else:
+            st.success("✅ Kaydedildi! (Listeden silme yapılamadı, lütfen kontrol edin.)")
+        
+        for key in list(st.session_state.keys()):
+            if key.startswith("input_") or key.startswith("num_"): 
+                del st.session_state[key]
         
         time.sleep(1)
         st.rerun()
     except Exception as e:
         st.error(f"Kayıt Hatası: {e}")
 
-if pas_gec_btn:
+if pas_eksik_btn:
     try:
-        w_atlanan.append_row([secilen_ad, datetime.now().strftime("%Y-%m-%d")])
-        st.warning(f"⏩ {secilen_ad} atlandı.")
+        w_atlanan.append_row([secilen_ad, datetime.now().strftime("%Y-%m-%d"), "Veri Eksik"])
+        st.warning(f"⏩ {secilen_ad} atlandı. (Sebep: Veri Eksik)")
+        time.sleep(1)
+        st.rerun()
+    except Exception as e:
+        st.error(f"Hata: {e}")
+
+if pas_sevk_btn:
+    try:
+        w_atlanan.append_row([secilen_ad, datetime.now().strftime("%Y-%m-%d"), "Dışarıya Sevk"])
+        st.warning(f"⏩ {secilen_ad} atlandı. (Sebep: Dışarıya Sevk)")
         time.sleep(1)
         st.rerun()
     except Exception as e:
