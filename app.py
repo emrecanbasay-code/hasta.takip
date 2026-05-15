@@ -595,8 +595,12 @@ if kaydet_btn:
 
 if pas_eksik_btn:
     try:
+        silme_basarili = listeden_hasta_sil(secilen_ad, w_liste)
         w_atlanan.append_row([secilen_ad, datetime.now().strftime("%Y-%m-%d"), "Veri Eksik"])
-        st.warning(f"⏩ {secilen_ad} atlandı. (Sebep: Veri Eksik)")
+        if silme_basarili:
+            st.success(f"✅ {secilen_ad} atlandı ve listeden silindi!")
+        else:
+            st.warning(f"⏩ {secilen_ad} atlandı. (Listeden silme yapılamadı)")
         sayfa_basina_kaydir()
         time.sleep(1)
         st.rerun()
@@ -605,8 +609,12 @@ if pas_eksik_btn:
 
 if pas_sevk_btn:
     try:
+        silme_basarili = listeden_hasta_sil(secilen_ad, w_liste)
         w_atlanan.append_row([secilen_ad, datetime.now().strftime("%Y-%m-%d"), "Dışarıya Sevk"])
-        st.warning(f"⏩ {secilen_ad} atlandı. (Sebep: Dışarıya Sevk)")
+        if silme_basarili:
+            st.success(f"✅ {secilen_ad} atlandı ve listeden silindi!")
+        else:
+            st.warning(f"⏩ {secilen_ad} atlandı. (Listeden silme yapılamadı)")
         sayfa_basina_kaydir()
         time.sleep(1)
         st.rerun()
