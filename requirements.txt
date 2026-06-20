@@ -1,5 +1,7 @@
 streamlit
-pandas
 gspread
 oauth2client
-oauth2client
+pandas
+openpyxl
+streamlit-mic-recorder
+groq
