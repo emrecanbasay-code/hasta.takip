@@ -830,19 +830,14 @@ st.markdown("---")
 with st.form("veri_giris", clear_on_submit=False):
     st.write("### 📝 Kayıt Formu")
     
-    # Hangi expander gruplarını zaten açtık takip edelim
-    current_expander = None
-    expander_context = None
-    rendered_in_expander = set()  # Expander içinde render edilen alanlar
+    rendered_group_headers = set()
     
-    # İlk geçiş: hangi alanlar expander'da olacak belirle
     field_to_group = {}
     for baslik in headers:
         grp = get_expander_group(baslik)
         if grp:
             field_to_group[baslik] = grp
     
-    # Form alanlarını sırayla render et
     i = 0
     while i < len(headers):
         baslik = headers[i]
@@ -856,26 +851,15 @@ with st.form("veri_giris", clear_on_submit=False):
         grp_key = field_to_group.get(baslik)
         
         if grp_key:
-            # Bu alan bir expander grubuna ait
-            if grp_key not in rendered_in_expander:
-                # Bu grubun expander'ını aç ve tüm alanlarını render et
+            if grp_key not in rendered_group_headers:
                 grp = EXPANDER_GRUPLARI[grp_key]
-                
-                # Expander varsayılan olarak kapalı - scroll azaltır
-                with st.expander(grp["baslik"], expanded=False):
-                    for baslik_exp in grp["alanlar"]:
-                        # Bu alanın header listesindeki index'ini bul
-                        if baslik_exp in headers:
-                            idx_exp = headers.index(baslik_exp)
-                            key_exp = f"input_{idx_exp}"
-                            b_lower_exp = baslik_exp.lower().replace("İ", "i").replace("I", "ı").strip()
-                            val = render_field(idx_exp, baslik_exp, key_exp, b_lower_exp, inside_expander=True)
-                            input_values[baslik_exp] = val
-                            st.markdown("<div class='row-container'></div>", unsafe_allow_html=True)
-                
-                rendered_in_expander.add(grp_key)
+                st.markdown(f"#### {grp['baslik']}")
+                rendered_group_headers.add(grp_key)
+            
+            val = render_field(i, baslik, key_id, b_lower)
+            input_values[baslik] = val
+            st.markdown("<div class='row-container'></div>", unsafe_allow_html=True)
         else:
-            # Normal alan - expander dışında render et
             val = render_field(i, baslik, key_id, b_lower)
             input_values[baslik] = val
             st.markdown("<div class='row-container'></div>", unsafe_allow_html=True)
