@@ -4,6 +4,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import time
 import pandas as pd
+from groq import Groq
+import json
 
 # ==========================================
 # 1. AYARLAR VE STİL
@@ -228,6 +230,77 @@ def get_connection():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(st.secrets["gcp_service_account"]), scope)
     return gspread.authorize(creds)
 
+@st.cache_resource
+def get_groq_client():
+    api_key = st.secrets["groq_api_key"]["key"]
+    return Groq(api_key=api_key)
+
+def groq_ile_veri_cikar(metin):
+    """Ses metnini Groq API ile JSON formatına dönüştürür."""
+    client = get_groq_client()
+    
+    prompt = """Sen bir hasta veri çıkarma asistanısın. Türkçe hasta bilgilerini JSON formatına dönüştür.
+İsim ve vardiya bilgisi VERİLMEYECEK, onlar zaten mevcut. Sadece aşağıdaki alanları çıkar:
+
+{
+  "yas": 0,
+  "cinsiyet": "",
+  "ates": 36.5,
+  "sistolik": 120,
+  "diyastolik": 80,
+  "nabiz": 80,
+  "spo2": 98,
+  "gks": 15,
+  "sikayet": "",
+  "ht": 0, "dm": 0, "kby": 0, "kah": 0, "af": 0, "koah": 0, "svh": 0, "malignite": 0, "kky": 0, "alzheimer": 0,
+  "entubasyon": 0, "inotrop": 0, "mukerrer_tetkik": 0, "kesin_tani": 0, "sekiz_saat": 0, "coklu_klinik": 0,
+  "konsultasyon_toplam": 0,
+  "1dahilye": 0, "1gogus_hast": 0, "1genel_cerrahi": 0, "1nrs": 0, "1kvc": 0, "1kbb": 0, "1plastik": 0, "1goz": 0, "1uroloji": 0, "1gogus_c": 0, "1kardiyoloji": 0, "1noroloji": 0, "1orto": 0, "1enfeksiyon_h": 0, "1psikiyatri": 0, "1cildiye": 0, "1anestezi": 0, "1radyoloji": 0, "1kdh": 0,
+  "koag": 0, "tit": 0, "trop": 0, "hmg": 0, "bk": 0, "kan_gazi": 0,
+  "cr": 0, "ct": 0, "mr": 0, "usg": 0,
+  "tani": "",
+  "son_tani": "",
+  "servis": 0, "1_basamak_ybu": 0, "2_basamak_ybu": 0, "3_basamak_ybu": 0,
+  "bolum_dahilye": 0, "bolum_gogus_hast": 0, "bolum_genel_cerrahi": 0, "bolum_nrs": 0, "bolum_kvc": 0, "bolum_kbb": 0, "bolum_plastik": 0, "bolum_goz": 0, "bolum_uroloji": 0, "bolum_gogus_c": 0, "bolum_kardiyoloji": 0, "bolum_noroloji": 0, "bolum_gogus_h": 0, "bolum_enfeksiyon_h": 0, "bolum_psikiyatri": 0, "bolum_cildiye": 0, "bolum_anestezi": 0, "bolum_radyoloji": 0, "bolum_kdh": 0, "bolum_orto": 0,
+  "devir": 0, "taburcu": 0, "olum": 0, "t_red": 0,
+  "yatis_suresi": 0,
+  "transfer_suresi": 0
+}
+
+Kurallar:
+- Sayısal değerler için sayı kullan (0 veya pozitif tam sayı)
+- String değerler için BÜYÜK HARF kullan
+- Bilgi metinde geçmiyorsa varsayılan değeri kullan
+- Çıktı SADECE JSON olacak, başka hiçbir şey yazma
+
+Hasta bilgileri:"""
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": metin}
+            ],
+            temperature=0.1,
+            max_tokens=1000
+        )
+        
+        yanit = response.choices[0].message.content.strip()
+        
+        if yanit.startswith("```"):
+            yanit = yanit.split("```")[1]
+            if yanit.startswith("json"):
+                yanit = yanit[4:]
+        
+        return json.loads(yanit)
+    except json.JSONDecodeError:
+        st.error("AI çıktısı JSON formatına dönüştürülemedi. Tekrar deneyin.")
+        return None
+    except Exception as e:
+        st.error(f"Groq API hatası: {e}")
+        return None
+
 def verileri_hazirla():
     client = get_connection()
     sh = client.open("Hasta_Takip_Sistemi")
@@ -313,6 +386,199 @@ def listeden_hasta_sil(hasta_isim, w_liste_sheet):
     except Exception as e:
         st.warning(f"Liste silme hatası: {e}")
         return False
+
+def formu_doldur(veri_json):
+    """AI çıktısındaki değerleri form alanlarına yazar."""
+    if not veri_json:
+        return
+    
+    header_map = {}
+    for idx, h in enumerate(headers):
+        h_lower = h.lower().replace("İ", "i").replace("I", "ı").strip()
+        header_map[h_lower] = idx
+    
+    if "yas" in veri_json and veri_json["yas"]:
+        key = f"input_{header_map.get('yaş', -1)}"
+        if key in st.session_state:
+            st.session_state[key] = int(veri_json["yas"])
+    
+    if "cinsiyet" in veri_json and veri_json["cinsiyet"]:
+        key = f"input_{header_map.get('cinsiyet', -1)}"
+        if key in st.session_state:
+            st.session_state[key] = veri_json["cinsiyet"].upper()
+    
+    vital_map = {
+        "ates": "ateş", "sistolik": "sistolik tansiyon",
+        "diyastolik": "diyastolik tansiyon", "nabiz": "nabız",
+        "spo2": "spo2", "gks": "gks"
+    }
+    for json_key, header_key in vital_map.items():
+        if json_key in veri_json and veri_json[json_key]:
+            idx = header_map.get(header_key, -1)
+            if idx >= 0:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = float(veri_json[json_key])
+    
+    if "sikayet" in veri_json and veri_json["sikayet"]:
+        for idx, h in enumerate(headers):
+            h_lower = h.lower().replace("İ", "i").replace("I", "ı")
+            if "başvuru şikayeti" in h_lower or "şikayet" in h_lower:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = veri_json["sikayet"].upper()
+                break
+    
+    kronik_map = {
+        "ht": "HT", "dm": "DM", "kby": "KBY", "kah": "KAH",
+        "af": "AF", "koah": "KOAH", "svh": "SVH", "malignite": "Malignite",
+        "kky": "KKY", "alzheimer": "ALZHEİMER"
+    }
+    for json_key, header_key in kronik_map.items():
+        if json_key in veri_json:
+            idx = header_map.get(header_key.lower(), -1)
+            if idx >= 0:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = bool(veri_json[json_key])
+    
+    yatirim_map = {
+        "entubasyon": "Entübasyon", "inotrop": "İnotrop",
+        "mukerrer_tetkik": "Mükerrer tetkik Ya da tedavi istemi",
+        "kesin_tani": "Kesin tanı koyulamaması",
+        "sekiz_saat": "8 saati aşıp yatmaması",
+        "coklu_klinik": "Birden fazla kliniği ilgilendirmesi"
+    }
+    for json_key, header_key in yatirim_map.items():
+        if json_key in veri_json:
+            idx = header_map.get(header_key.lower(), -1)
+            if idx >= 0:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = bool(veri_json[json_key])
+    
+    kons_map = {
+        "1dahilye": "1Dahilye", "1gogus_hast": "1Göğüs Hast",
+        "1genel_cerrahi": "1Genel Cerrahi", "1nrs": "1Nrş",
+        "1kvc": "1KVC", "1kbb": "1Kbb", "1plastik": "1Plastik",
+        "1goz": "1Göz", "1uroloji": "1Üroloji", "1gogus_c": "1Göğüs C.",
+        "1kardiyoloji": "1Kardiyoloji", "1noroloji": "1Nöroloji",
+        "1orto": "1Orto", "1enfeksiyon_h": "1Enfeksiyon H.",
+        "1psikiyatri": "1Psikiyatri", "1cildiye": "1Cildiye",
+        "1anestezi": "1Anestezi", "1radyoloji": "1Radyoloji", "1kdh": "1KDH"
+    }
+    for json_key, header_key in kons_map.items():
+        if json_key in veri_json and veri_json[json_key]:
+            idx = header_map.get(header_key.lower(), -1)
+            if idx >= 0:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = int(veri_json[json_key])
+    
+    if "konsultasyon_toplam" in veri_json and veri_json["konsultasyon_toplam"]:
+        idx = header_map.get("yapılan kolsültasyon sayısı", -1)
+        if idx >= 0:
+            key = f"input_{idx}"
+            if key in st.session_state:
+                st.session_state[key] = int(veri_json["konsultasyon_toplam"])
+    
+    lab_map = {
+        "koag": "KOAG", "tit": "TİT", "trop": "TROP",
+        "hmg": "Hmg", "bk": "Bk", "kan_gazi": "Kan Gazı"
+    }
+    for json_key, header_key in lab_map.items():
+        if json_key in veri_json:
+            idx = header_map.get(header_key.lower(), -1)
+            if idx >= 0:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = bool(veri_json[json_key])
+    
+    gor_map = {"cr": "Cr", "ct": "Ct", "mr": "Mr", "usg": "Usg"}
+    for json_key, header_key in gor_map.items():
+        if json_key in veri_json:
+            idx = header_map.get(header_key.lower(), -1)
+            if idx >= 0:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = bool(veri_json[json_key])
+    
+    if "tani" in veri_json and veri_json["tani"]:
+        for idx, h in enumerate(headers):
+            if h.strip() == "Tanısı":
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = veri_json["tani"].upper()
+                break
+    
+    if "son_tani" in veri_json and veri_json["son_tani"]:
+        for idx, h in enumerate(headers):
+            if h.strip() == "SON TANISI":
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = veri_json["son_tani"].upper()
+                break
+    
+    yatyeri_map = {
+        "servis": "Servis", "1_basamak_ybu": "1. Basamak Ybü",
+        "2_basamak_ybu": "2. Basamak Ybü", "3_basamak_ybu": "3. Basamak Ybü"
+    }
+    for json_key, header_key in yatyeri_map.items():
+        if json_key in veri_json:
+            idx = header_map.get(header_key.lower(), -1)
+            if idx >= 0:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = bool(veri_json[json_key])
+    
+    bolum_map = {
+        "bolum_dahilye": "Dahilye", "bolum_gogus_hast": "Göğüs Hast",
+        "bolum_genel_cerrahi": "Genel Cerrahi", "bolum_nrs": "Nrş",
+        "bolum_kvc": "KVC", "bolum_kbb": "Kbb", "bolum_plastik": "Plastik",
+        "bolum_goz": "Göz", "bolum_uroloji": "Üroloji", "bolum_gogus_c": "Göğüs C.",
+        "bolum_kardiyoloji": "Kardiyoloji", "bolum_noroloji": "Nöroloji",
+        "bolum_gogus_h": "Göğüs H.", "bolum_enfeksiyon_h": "Enfeksiyon H.",
+        "bolum_psikiyatri": "Psikiyatri", "bolum_cildiye": "Cildiye",
+        "bolum_anestezi": "Anestezi", "bolum_radyoloji": "Radyoloji",
+        "bolum_kdh": "KDH", "bolum_orto": "orto"
+    }
+    for json_key, header_key in bolum_map.items():
+        if json_key in veri_json:
+            idx = header_map.get(header_key.lower(), -1)
+            if idx >= 0:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = bool(veri_json[json_key])
+    
+    sonuc_map = {
+        "devir": "DEVİR", "taburcu": "Taburcu",
+        "olum": "Ölüm", "t_red": "T. RED"
+    }
+    for json_key, header_key in sonuc_map.items():
+        if json_key in veri_json:
+            idx = header_map.get(header_key.lower(), -1)
+            if idx >= 0:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = bool(veri_json[json_key])
+    
+    if "yatis_suresi" in veri_json and veri_json["yatis_suresi"]:
+        for idx, h in enumerate(headers):
+            h_lower = h.lower().replace("İ", "i").replace("I", "ı")
+            if "yatış karar" in h_lower and "süre" in h_lower:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = veri_json["yatis_suresi"]
+                break
+    
+    if "transfer_suresi" in veri_json and veri_json["transfer_suresi"]:
+        for idx, h in enumerate(headers):
+            h_lower = h.lower().replace("İ", "i").replace("I", "ı")
+            if "transfer" in h_lower and "süre" in h_lower:
+                key = f"input_{idx}"
+                if key in st.session_state:
+                    st.session_state[key] = veri_json["transfer_suresi"]
+                break
 
 # ==========================================
 # 4. HASTA SEÇİMİ
@@ -492,6 +758,73 @@ def render_field(i, baslik, key_id, b_lower, inside_expander=False):
         # 9. DİĞER METİN
         else:
             return st.text_input("Sonuç", key=key_id, label_visibility="collapsed")
+
+
+# ==========================================
+# SESLİ VERİ GİRİŞİ
+# ==========================================
+st.markdown("### 🎤 Sesli Veri Girişi")
+st.caption("Hasta bilgilerini sesli anlatın. 'Doldur' dediğinizde AI formu dolduracak.")
+
+col_mic, col_ai1, col_ai2 = st.columns([1, 1, 1])
+
+with col_mic:
+    try:
+        from streamlit_mic_recorder import mic_recorder
+        audio = mic_recorder(
+            start_prompt="🎤 Konuş",
+            stop_prompt="⏹ Durdur",
+            just_once=True,
+            use_container_width=True,
+            key="mic_recorder"
+        )
+        if audio and audio.get("bytes"):
+            st.session_state.ses_audio = audio["bytes"]
+            st.info("🎤 Ses kaydedildi. 'AI ile Doldur' butonuna basın.")
+    except ImportError:
+        st.warning("streamlit-mic-recorder yüklenemedi. Manuel giriş yapın.")
+        audio = None
+
+with col_ai1:
+    if st.button("🤖 AI ile Doldur", type="secondary", use_container_width=True):
+        if "ses_audio" in st.session_state and st.session_state.ses_audio:
+            try:
+                from groq import Groq as GroqClient
+                client = get_groq_client()
+                
+                with st.spinner("Ses metne dönüştürülüyor..."):
+                    import io
+                    audio_file = io.BytesIO(st.session_state.ses_audio)
+                    audio_file.name = "audio.wav"
+                    
+                    transcription = client.audio.transcriptions.create(
+                        file=audio_file,
+                        model="whisper-large-v3",
+                        language="tr"
+                    )
+                    ses_metni = transcription.text
+                    st.session_state.ses_metni = ses_metni
+                    st.info(f"📝 Algılanan: {ses_metni}")
+                
+                with st.spinner("AI hasta bilgilerini çıkarıyor..."):
+                    veri = groq_ile_veri_cikar(ses_metni)
+                    if veri:
+                        formu_doldur(veri)
+                        st.success("✅ Form AI ile dolduruldu! Kontrol edip kaydedin.")
+                        st.session_state.ses_audio = None
+                        st.rerun()
+            except Exception as e:
+                st.error(f"AI hatası: {e}")
+        else:
+            st.warning("Önce sesli giriş yapın.")
+
+with col_ai2:
+    if st.button("🗑️ Temizle", use_container_width=True):
+        st.session_state.ses_audio = None
+        st.session_state.ses_metni = ""
+        st.rerun()
+
+st.markdown("---")
 
 
 with st.form("veri_giris", clear_on_submit=False):
