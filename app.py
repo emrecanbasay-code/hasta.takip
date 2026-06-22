@@ -58,8 +58,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # === GERİ TUŞUYLA ÇIKMAYI ENGELLEME ===
-import streamlit.components.v1 as components
-components.html("""
+st.markdown("""
 <script>
     // Tarayıcı geri tuşuyla uygulamadan çıkmayı engelle
     history.pushState(null, null, location.href);
@@ -71,17 +70,17 @@ components.html("""
         history.pushState(null, null, location.href);
     }, 2000);
 </script>
-""", height=0)
+""", unsafe_allow_html=True)
 
 st.title("🏥 Dikey Hızlı Veri Girişi (v15)")
 
 if st.query_params.get("scroll_top") == "1":
-    components.html("""<script>
+    st.markdown("""<script>
         setTimeout(function() {
             window.parent.document.querySelector('section.main').scrollTo({top: 0, behavior: 'smooth'});
             window.scrollTo({top: 0, behavior: 'smooth'});
         }, 100);
-    </script>""", height=0)
+    </script>""", unsafe_allow_html=True)
     st.query_params.clear()
 
 # --- Sayfa başına kaydırma fonksiyonu ---
@@ -93,11 +92,11 @@ def sayfa_basina_kaydir():
         </script>""",
         unsafe_allow_html=True
     )
-    components.html(
+    st.markdown(
         """<script>
             window.parent.document.querySelector('section.main').scrollTo({top: 0, behavior: 'smooth'});
         </script>""",
-        height=0
+        unsafe_allow_html=True
     )
 
 # --- A. CHECKBOX OLACAKLAR (EVET/HAYIR) ---
