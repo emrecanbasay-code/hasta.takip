@@ -75,6 +75,15 @@ components.html("""
 
 st.title("🏥 Dikey Hızlı Veri Girişi (v15)")
 
+if st.query_params.get("scroll_top") == "1":
+    components.html("""<script>
+        setTimeout(function() {
+            window.parent.document.querySelector('section.main').scrollTo({top: 0, behavior: 'smooth'});
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        }, 100);
+    </script>""", height=0)
+    st.query_params.clear()
+
 # --- Sayfa başına kaydırma fonksiyonu ---
 def sayfa_basina_kaydir():
     st.markdown(
@@ -900,12 +909,29 @@ if kaydet_btn:
         else:
             st.success("✅ Kaydedildi! (Listeden silme yapılamadı, lütfen kontrol edin.)")
         
+        for i_h, h in enumerate(headers):
+            if not h.strip():
+                continue
+            key = f"input_{i_h}"
+            b_lower = h.lower().replace("İ", "i").replace("I", "ı").strip()
+            if b_lower in SABIT_DEGERLER:
+                st.session_state[key] = SABIT_DEGERLER[b_lower]
+            elif h in SIFIR_LIST:
+                st.session_state[key] = 0
+            elif "tarih" in b_lower:
+                st.session_state[key] = datetime.now()
+            elif h in CHECKBOX_LIST:
+                st.session_state[key] = False
+            elif "cinsiyet" in b_lower:
+                st.session_state[key] = ""
+            else:
+                st.session_state[key] = ""
+        
         for key in list(st.session_state.keys()):
-            if key.startswith("input_") or key.startswith("num_") or key.startswith("sikayet_sec_") or key.startswith("tani_sec_"):
+            if key.startswith("num_") or key.startswith("sikayet_sec_") or key.startswith("tani_sec_"):
                 del st.session_state[key]
         
-        sayfa_basina_kaydir()
-        time.sleep(1)
+        st.query_params["scroll_top"] = "1"
         st.rerun()
     except Exception as e:
         st.error(f"Kayıt Hatası: {e}")
@@ -918,8 +944,7 @@ if pas_eksik_btn:
             st.success(f"✅ {secilen_ad} atlandı ve listeden silindi!")
         else:
             st.warning(f"⏩ {secilen_ad} atlandı. (Listeden silme yapılamadı)")
-        sayfa_basina_kaydir()
-        time.sleep(1)
+        st.query_params["scroll_top"] = "1"
         st.rerun()
     except Exception as e:
         st.error(f"Hata: {e}")
@@ -932,8 +957,7 @@ if pas_sevk_btn:
             st.success(f"✅ {secilen_ad} atlandı ve listeden silindi!")
         else:
             st.warning(f"⏩ {secilen_ad} atlandı. (Listeden silme yapılamadı)")
-        sayfa_basina_kaydir()
-        time.sleep(1)
+        st.query_params["scroll_top"] = "1"
         st.rerun()
     except Exception as e:
         st.error(f"Hata: {e}")
